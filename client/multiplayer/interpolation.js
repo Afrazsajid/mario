@@ -12,8 +12,19 @@
     display.vx = target.vx;
     display.vy = target.vy;
     display.facing = target.facing;
+    display.direction = target.direction;
     display.grounded = target.grounded;
     display.finished = target.finished;
+    display.dead = target.dead;
+    display.isDead = target.isDead;
+    display.isFinished = target.isFinished;
+    display.form = target.form;
+    display.pendingForm = target.pendingForm;
+    display.temporaryEffect = target.temporaryEffect;
+    display.effectExpiresAt = target.effectExpiresAt;
+    display.isInvulnerable = target.isInvulnerable;
+    display.animation = target.animation;
+    display.animationFrame = target.animationFrame;
     return display;
   }
 

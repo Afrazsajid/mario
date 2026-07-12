@@ -72,10 +72,7 @@ select:focus-visible {
 }
 
 .parallax {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  overflow: hidden;
+  display: none;
 }
 
 .cloud {

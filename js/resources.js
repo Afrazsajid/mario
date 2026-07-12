@@ -1,6 +1,7 @@
 //simple resource loader
 (function() {
     var resourceCache = {};
+    var failed = {};
     var loading = [];
     var readyCallbacks = [];
 
@@ -29,6 +30,14 @@
                     readyCallbacks.forEach(function(func) { func(); });
                 }
             };
+            img.onerror = function() {
+                failed[url] = true;
+                resourceCache[url] = null;
+                console.error("Failed to load image asset: " + url);
+                if(isReady()) {
+                    readyCallbacks.forEach(function(func) { func(); });
+                }
+            };
             resourceCache[url] = false;
             img.src = url;
         }
@@ -42,7 +51,7 @@
         var ready = true;
         for(var k in resourceCache) {
             if(resourceCache.hasOwnProperty(k) &&
-               !resourceCache[k]) {
+               resourceCache[k] === false) {
                 ready = false;
             }
         }
@@ -57,6 +66,9 @@
         load: load,
         get: get,
         onReady: onReady,
-        isReady: isReady
+        isReady: isReady,
+        failed: function() {
+          return Object.keys(failed);
+        }
     };
 })();

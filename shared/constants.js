@@ -16,7 +16,8 @@
   var CHARACTERS = Object.freeze({
     nova: {
       id: "nova",
-      name: "Nova",
+      name: "Mario",
+      atlasId: "mario",
       primary: "#35E4D0",
       accent: "#FFD85A",
       sprite: "sprites/player.png",
@@ -24,7 +25,8 @@
     },
     bolt: {
       id: "bolt",
-      name: "Bolt",
+      name: "Luigi",
+      atlasId: "luigi",
       primary: "#FF6B6B",
       accent: "#56C7FF",
       sprite: "sprites/player.png",
@@ -50,6 +52,8 @@
     LEVEL_HEIGHT: 240,
     PLAYER_WIDTH: 14,
     PLAYER_HEIGHT: 16,
+    PLAYER_SMALL_HEIGHT: 16,
+    PLAYER_SUPER_HEIGHT: 32,
     CHARACTERS: CHARACTERS,
     DEFAULT_CHARACTER: "nova"
   });

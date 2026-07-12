@@ -10,7 +10,8 @@
   var AIR_DECEL = 420;
   var WALK_SPEED = 96;
   var RUN_SPEED = 148;
-  var JUMP_VELOCITY = -315;
+  var JUMP_VELOCITY = -345;
+  var HIGH_JUMP_VELOCITY = -405;
   var COYOTE_TIME = 0.1;
   var JUMP_BUFFER = 0.12;
 
@@ -21,18 +22,27 @@
       vx: 0,
       vy: 0,
       w: constants.PLAYER_WIDTH,
-      h: constants.PLAYER_HEIGHT,
+      h: constants.PLAYER_SMALL_HEIGHT,
       facing: slot === 1 ? -1 : 1,
+      direction: slot === 1 ? "left" : "right",
       grounded: false,
       coyote: 0,
       jumpBuffer: 0,
       jumpHeld: false,
       dead: false,
       invulnerableUntil: 0,
+      form: "small",
+      pendingForm: null,
+      temporaryEffect: "none",
+      effectExpiresAt: 0,
+      isInvulnerable: false,
+      animation: "idle",
+      animationFrame: 0,
       lastSequence: 0,
       finished: false,
       finishedAt: null,
-      power: "none"
+      isDead: false,
+      isFinished: false
     };
   }
 
@@ -84,6 +94,7 @@
     if (dir !== 0) {
       state.vx += dir * MOVE_ACCEL * dt;
       state.facing = dir;
+      state.direction = dir < 0 ? "left" : "right";
       if (Math.abs(state.vx) > maxSpeed) state.vx = maxSpeed * Math.sign(state.vx);
     } else {
       var decel = state.grounded ? GROUND_DECEL : AIR_DECEL;
@@ -94,7 +105,7 @@
     state.coyote = Math.max(0, state.coyote - dt);
     state.jumpBuffer = input.jump ? JUMP_BUFFER : Math.max(0, state.jumpBuffer - dt);
     if (state.jumpBuffer > 0 && (state.grounded || state.coyote > 0)) {
-      state.vy = JUMP_VELOCITY;
+      state.vy = input.highJump ? HIGH_JUMP_VELOCITY : JUMP_VELOCITY;
       state.grounded = false;
       state.coyote = 0;
       state.jumpBuffer = 0;
@@ -116,6 +127,15 @@
     state.x = Math.max(0, Math.min(world.width - state.w, state.x));
     if (state.y > world.height + 40) state.dead = true;
     if (state.x >= world.finishX && !state.finished) state.finished = true;
+    state.isDead = !!state.dead;
+    state.isFinished = !!state.finished;
+    state.isInvulnerable = Date.now() < (state.invulnerableUntil || 0) || state.temporaryEffect === "star";
+    if (state.dead) state.animation = "dead";
+    else if (state.finished) state.animation = "finished";
+    else if (!state.grounded) state.animation = "jump";
+    else if (Math.abs(state.vx) > 8) state.animation = "run";
+    else state.animation = "idle";
+    state.animationFrame = (state.animationFrame || 0) + dt * 10;
     return state;
   }
 

@@ -59,6 +59,8 @@ class GameSession {
     this.world.enemies.forEach((enemy) => physics.stepEnemy(enemy, dt, this.world));
     this.room.players.forEach((player) => {
       if (!player.connected) return;
+      this.updatePowerTimers(player);
+      this.applyPendingForm(player);
       const previousDead = player.state.dead;
       const previousFinished = player.state.finished;
       physics.stepPlayer(player.state, player.input || {}, dt, this.world);
@@ -68,6 +70,8 @@ class GameSession {
         const spawn = this.world.spawnPoints[player.slot];
         player.state = physics.createPlayerState(spawn, player.slot);
         player.state.invulnerableUntil = Date.now() + 1800;
+        player.state.temporaryEffect = "damageInvulnerability";
+        player.state.effectExpiresAt = player.state.invulnerableUntil;
       }
       if (player.state.finished && !previousFinished) {
         player.state.finishedAt = Date.now() - this.startedAt;
@@ -99,10 +103,70 @@ class GameSession {
     this.world.powerUps.forEach((power) => {
       if (!power.collectedBy && physics.overlaps(box, power)) {
         power.collectedBy = player.id;
-        player.state.power = power.type;
-        this.score(player, power.type === "star" ? "star" : "mushroom");
+        this.applyPowerUp(player, power.type);
+        this.score(player, power.type === "star" ? "star" : power.type === "fireFlower" ? "fireFlower" : "mushroom");
       }
     });
+  }
+
+  updatePowerTimers(player) {
+    const state = player.state;
+    if (!state) return;
+    const now = Date.now();
+    if (state.effectExpiresAt && now >= state.effectExpiresAt) {
+      state.temporaryEffect = "none";
+      state.effectExpiresAt = 0;
+    }
+  }
+
+  canResizePlayer(state, nextHeight) {
+    const feetY = state.y + state.h;
+    const test = { x: state.x, y: feetY - nextHeight, w: state.w, h: nextHeight };
+    return !this.world.solids.some((solid) => physics.overlaps(test, solid));
+  }
+
+  setPlayerForm(player, form) {
+    const state = player.state;
+    const nextHeight = form === "small" ? constants.PLAYER_SMALL_HEIGHT : constants.PLAYER_SUPER_HEIGHT;
+    if (state.h !== nextHeight) {
+      if (!this.canResizePlayer(state, nextHeight)) {
+        state.pendingForm = form;
+        return false;
+      }
+      const feetY = state.y + state.h;
+      state.h = nextHeight;
+      state.y = feetY - state.h;
+    }
+    state.form = form;
+    state.pendingForm = null;
+    return true;
+  }
+
+  applyPendingForm(player) {
+    if (player.state && player.state.pendingForm) this.setPlayerForm(player, player.state.pendingForm);
+  }
+
+  applyPowerUp(player, type) {
+    const state = player.state;
+    if (type === "mushroom") {
+      if (state.form === "small") this.setPlayerForm(player, "super");
+      else if (state.form === "super") this.setPlayerForm(player, "fire");
+    } else if (type === "fireFlower") {
+      this.setPlayerForm(player, "fire");
+    } else if (type === "star") {
+      state.temporaryEffect = "star";
+      state.effectExpiresAt = Date.now() + 10000;
+    }
+  }
+
+  damagePlayer(player) {
+    const state = player.state;
+    if (state.form === "fire") this.setPlayerForm(player, "super");
+    else if (state.form === "super") this.setPlayerForm(player, "small");
+    else state.dead = true;
+    state.invulnerableUntil = Date.now() + 1400;
+    state.temporaryEffect = "damageInvulnerability";
+    state.effectExpiresAt = state.invulnerableUntil;
   }
 
   checkEnemyCollisions(player) {
@@ -110,12 +174,12 @@ class GameSession {
     this.world.enemies.forEach((enemy) => {
       if (!enemy.alive || !physics.overlaps(box, enemy)) return;
       const stomp = box.vy > 0 && box.y + box.h - enemy.y <= 12;
-      if (stomp || box.power === "star") {
+      if (stomp || box.temporaryEffect === "star") {
         enemy.alive = false;
         box.vy = -170;
         this.score(player, enemy.type === "koopa" ? "enemyAdvanced" : "enemyBasic");
       } else if (Date.now() > box.invulnerableUntil) {
-        box.invulnerableUntil = Date.now() + 1400;
+        this.damagePlayer(player);
         this.score(player, "damage");
       }
     });
@@ -154,6 +218,7 @@ class GameSession {
         slot: player.slot,
         name: player.name,
         character: player.character,
+        characterId: player.character,
         connected: player.connected,
         ready: player.ready,
         ping: player.ping,

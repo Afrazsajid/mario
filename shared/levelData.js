@@ -51,6 +51,7 @@
     return {
       id: "level-1-1",
       title: "Skyline Sprint 1-1",
+      theme: "aboveground",
       width: constants.LEVEL_WIDTH,
       height: constants.LEVEL_HEIGHT,
       spawnPoints: [{ x: 56, y: 192 }, { x: 76, y: 192 }],
@@ -62,8 +63,9 @@
       }),
       powerUps: [
         { id: "power-0", type: "mushroom", x: 21 * tile, y: 8 * tile, w: 14, h: 14, collectedBy: null },
-        { id: "power-1", type: "star", x: 100 * tile, y: 8 * tile, w: 14, h: 14, collectedBy: null },
-        { id: "power-2", type: "mushroom", x: 108 * tile, y: 4 * tile, w: 14, h: 14, collectedBy: null }
+        { id: "power-1", type: "fireFlower", x: 78 * tile, y: 8 * tile, w: 14, h: 14, collectedBy: null },
+        { id: "power-2", type: "star", x: 100 * tile, y: 8 * tile, w: 14, h: 14, collectedBy: null },
+        { id: "power-3", type: "mushroom", x: 108 * tile, y: 4 * tile, w: 14, h: 14, collectedBy: null }
       ],
       enemies: enemyTiles.map(function (e, index) {
         return { id: "enemy-" + index, type: e[2], x: e[0] * tile, y: e[1] * tile, w: 14, h: e[2] === "koopa" ? 24 : 14, vx: -28, vy: 0, alive: true };

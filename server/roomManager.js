@@ -37,6 +37,7 @@ class Room {
       slot: player.slot,
       name: player.name,
       character: player.character,
+      characterId: player.character,
       host: player.id === this.hostId,
       connected: player.connected,
       ready: player.ready,

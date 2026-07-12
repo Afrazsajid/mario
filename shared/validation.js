@@ -27,7 +27,7 @@
 
   function sanitizeInputPacket(payload) {
     if (!payload || typeof payload !== "object") return { ok: false, error: "Malformed input packet." };
-    var allowed = ["sequence", "left", "right", "jump", "run", "action", "interact", "clientTime"];
+    var allowed = ["sequence", "left", "right", "jump", "run", "action", "interact", "highJump", "clientTime"];
     for (var key in payload) {
       if (allowed.indexOf(key) === -1) return { ok: false, error: "Unknown input property." };
     }
@@ -40,6 +40,7 @@
         left: !!payload.left,
         right: !!payload.right,
         jump: !!payload.jump,
+        highJump: !!payload.highJump,
         run: !!payload.run,
         action: !!payload.action,
         interact: !!payload.interact,

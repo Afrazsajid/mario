@@ -18,6 +18,8 @@
     KeyZ: "RUN",
     KeyF: "ACTION",
     KeyE: "INTERACT",
+    ControlLeft: "CONTROL",
+    ControlRight: "CONTROL",
     Escape: "PAUSE",
     KeyM: "MUTE",
     F11: "FULLSCREEN"
@@ -65,7 +67,8 @@
         jump: !!pressedKeys.JUMP,
         run: !!pressedKeys.RUN,
         action: !!pressedKeys.ACTION,
-        interact: !!pressedKeys.INTERACT
+        interact: !!pressedKeys.INTERACT,
+        highJump: !!pressedKeys.JUMP && !!pressedKeys.CONTROL
       };
     },
     reset: function () {
