@@ -1,1 +1,5 @@
-*.txt
+node_modules/
+.env
+npm-debug.log*
+coverage/
+.DS_Store

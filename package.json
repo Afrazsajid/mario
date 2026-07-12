@@ -1,0 +1,29 @@
+{
+  "name": "pixel-quest-duo",
+  "version": "1.0.0",
+  "description": "A two-player private-room online platform game built with vanilla JS, Express and Socket.IO.",
+  "main": "server/server.js",
+  "scripts": {
+    "dev": "nodemon server/server.js",
+    "start": "node server/server.js",
+    "test": "node --test"
+  },
+  "keywords": [
+    "platformer",
+    "socket.io",
+    "multiplayer",
+    "canvas"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.19.2",
+    "socket.io": "^4.7.5"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.4"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

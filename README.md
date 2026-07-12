@@ -1,71 +1,157 @@
+# Pixel Quest Duo
 
-[![Mario](http://www.garrettjohnson.net/images/fulls/mariofull.png)](http://www.garrettjohnson.net/mario)
-#Mario
-[Mario.js](www.garrettjohnson.net/mario "Mario.js") is a clone of Super Mario Bros. for the Nintendo Entertainment System, implemented in Javascript.  It implements a hand-built game engine using the HTML5 Canvas.
+Pixel Quest Duo is a full-screen two-player online platform game built with vanilla HTML, CSS and JavaScript on the client, plus Node.js, Express and Socket.IO on the server.
 
-Disclaimer: This project is for demonstration only. If you really want to play Mario, please do it on a console. The graphics, sounds, and original design of Super Mario Bros. are all owned by Nintendo.
+The original canvas/entity code and level assets are preserved where useful, but online play is now server-authoritative: browsers send input intentions, and the server owns room membership, positions, collectibles, enemies, scoring, timers, reconnect state and winner calculation.
 
-#Engine
+## Important Asset Note
 
-##Game Flow
-The main loop tries to render at 60fps. Each frame, we go through a few steps to update the game, and then render.
+Some existing sprite and audio files are still present as temporary development assets. Before public or commercial deployment, replace every sprite and sound with original or properly licensed assets. Asset references are centralized through the existing `sprites/`, `sounds/`, `shared/levelData.js` and browser renderer paths to make that replacement straightforward.
 
-First, we get the controls. Depending on what the player is pressing, we make some changes to the player object.
+## Run Locally
 
-Then, we update each entity, and the general game state. Entities are game objects which have data about their position, movement, collision boxes, and sprite, as well as functions for updating that state, and rendering to the canvas.
+```bash
+npm install
+npm run dev
+```
 
-Scrolling is implemented using a viewport position that increases as Mario travels to the right. We only render or do calculations on objects that are close enough to the left edge of the screen. As in the original game, enemies become active slightly before they appear on screen.
+Open `http://localhost:3000`.
 
-The update function contains all of the logic for mutating the object's state without data from other entities. Once each object has updated, we check collisions. Independent movement, such as coins popping out of blocks, or Mario grabbing the flag and running out of the stage, are controlled here.
+Production-style local run:
 
-##Collision
-For obstacles such as walls, the ground, and the various blocks, they are indexed by their position in the game, so each entity only needs to check the area around itself for collision with those.
+```bash
+npm start
+```
 
-Then, each entity iterates through the other active entities to determine collision with moving objects, calling functions to update positions and state as appropriate.
+Health check:
 
-The player object only checks collision with terrain. Enemies and items check their collision with the player and tell it how to update.
+```bash
+curl http://localhost:3000/health
+```
 
-Note that collision boxes are separate from the display position of the entity's sprite. This was the case in the original game as well. Generally speaking, making the collision slightly more generous improves game feel.
+## Test
 
-##Rendering
-Once everything is in its proper place, we call each object's render function. Since the canvas doesn't implement a z-axis, the layering effect is handled entirely by rendering the objects in this order:
+```bash
+npm test
+```
 
-Background
-Props
-Items
-Enemies
-Projectiles
-Terrain
-Player
-Pipes
+Current automated coverage uses Node's built-in test runner and covers room creation/joining, rejecting a third player, invalid names/input, ready/start state, score changes, duplicate coin/enemy prevention, winner tie-breaking, disconnect/reconnect, room cleanup, rate limiting and restart reset behavior.
 
-Each object in the game holds a reference to a sprite object. Sprites identify which slice of what image to use, and data about which other frames in the sheet are part of the current animation, and how fast it should animate.
+## Manual Multiplayer Checklist
 
-Sprites assume that the entire animation is contained on a single row of the sheet. For the few exceptions, we force the sprite into the correct frame in the entity's update function.
+1. Run `npm run dev`.
+2. Open `http://localhost:3000` in one browser window.
+3. Enter a 2-16 character player name and choose Nova or Bolt.
+4. Select **Create Private Game**.
+5. Copy the invite link or room code.
+6. Open a second browser window, private window, or another computer on the same reachable host.
+7. Open the invite link or choose **Join Game** and enter the room code.
+8. Confirm a third window is rejected if it tries to join the same full room.
+9. Ready both players.
+10. Start from the host window.
+11. Confirm both players appear in the same world, Space jumps, Shift runs, coins score once, enemies are shared, the timer matches and results declare the correct winner.
+12. Refresh one browser during play and re-open the invite URL quickly to verify reconnect during the grace period.
+13. On results, vote **Play Again** from both windows and confirm the room returns to a reset lobby.
 
-Similarly, entities which need to face left and right replace the image reference in their sprite object with a flipped counterpart.
+## Controls
 
+- Move: `A` / `D` or Left / Right Arrow
+- Jump: `Space`, with temporary `X` fallback
+- Run: Left or Right `Shift`, with temporary `Z` fallback
+- Action: `F`
+- Interact: `E`
+- Pause: `Escape`
+- Fullscreen: `F11` or the UI button
+- Mute: `M`
 
-#Level Generation
-Each level object is created with references to the sprites to use for each type of object in the game. In this case, there are only a few tile sets, so individual levels could inherit from level subclasses for overworld, underground, castle, etc.
+## Architecture
 
-The level is constructed using a series of calls to functions that populate the tables of objects in the game world.
+`server/server.js` serves the static game and Socket.IO from the same HTTP server. `server/socketHandlers.js` validates socket messages and delegates room/game logic to `server/roomManager.js` and `server/gameSession.js`.
 
-Pipes work by setting up the animation, and then calling a function to load the new level. Exit pipes use the same code for moving Mario, but with another callback that puts the player into position after setting up the stage.
+Shared modules in `shared/` run in both Node and the browser:
 
-Known Bugs and Features to Come
-===============================
--Scaling sprites makes them appear with awkward borders. Some fiddling helps this (as you can see in the live version), but they are still not quite perfect.
--A rare case that causes invincibility from getting hit to never end.
--Goombas don't animate in sync with each other.
--Sometimes goombas can get stuck inside each other. I'm not entirely sure what causes this.
--Some sounds might not work due to format compatibility, especially in IE. Yes, IE doesn't support Microsoft's own file format. Really.
+- `constants.js`: room states, character definitions, tick rates and dimensions.
+- `protocol.js`: documented socket event names and payload summaries.
+- `scoring.js`: score values, combo handling and winner tie-breaking.
+- `validation.js`: player name, room code, character and input packet validation.
+- `levelData.js`: deterministic level geometry, coins, power-ups and enemies.
+- `physics.js`: reusable platformer movement, collision and enemy stepping.
 
-All of the features to be implemented are the actual features of the game!
-Namely, a score counter, more types of enemies, and 1up mushrooms.
+The client keeps rendering and UI local. It predicts local movement immediately, reconciles to server snapshots, smooths remote players and never sends score or arbitrary positions.
 
-And more levels!
+## Socket Events
 
-Also, it should be possible to scale the game to any size, although in order to preserve sprite dimensions changing the actual size of the play area will be necessary for widescreen. For now, the game is rendered in 768x720.
+Client to server:
 
-Beyond that, it would be nice to recreate the original game in even more detail, including the precise replication of the 21-frame rule, and glitches such as well-ejection errors, alternate pipes, and various simultaneous left+right input shenanigans.
+- `room:create`
+- `room:join`
+- `room:leave`
+- `room:ready`
+- `room:character`
+- `room:start`
+- `game:input`
+- `game:restartVote`
+- `game:returnToLobby`
+- `connection:ping`
+
+Server to client:
+
+- `room:created`
+- `room:joined`
+- `room:state`
+- `room:playerJoined`
+- `room:playerLeft`
+- `room:playerReady`
+- `room:error`
+- `game:countdown`
+- `game:start`
+- `game:snapshot`
+- `game:event`
+- `game:playerFinished`
+- `game:over`
+- `game:restartStatus`
+- `connection:quality`
+- `connection:pong`
+
+## Invite Links
+
+Invite links use the current page origin:
+
+```text
+https://your-domain.example/?room=ROOM_CODE
+```
+
+Reconnect tokens are stored in `sessionStorage` and are never placed in invite URLs.
+
+## Deployment
+
+Required environment variables are documented in `.env.example`:
+
+```text
+PORT=
+NODE_ENV=
+PUBLIC_URL=
+ALLOWED_ORIGINS=
+```
+
+For production:
+
+- Serve behind HTTPS so WebSockets use WSS.
+- Configure reverse proxies to forward WebSocket upgrade headers.
+- Set `ALLOWED_ORIGINS` to trusted origins, comma-separated.
+- Set `PUBLIC_URL` to the public HTTPS origin used for invite links.
+- Use sticky WebSocket sessions if running more than one server instance.
+- Move room state to shared storage and add a Socket.IO Redis adapter or equivalent before horizontal scaling.
+
+Docker:
+
+```bash
+docker build -t pixel-quest-duo .
+docker run -p 3000:3000 --env-file .env pixel-quest-duo
+```
+
+## Known Limitations
+
+- The server-authoritative simulation currently mirrors the main level geometry and core entities, while the older tunnel transition remains preserved in the legacy files for future deeper integration.
+- Temporary development sprites/audio must be replaced before public release.
+- In-memory rooms are designed for a single server instance.

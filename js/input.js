@@ -1,54 +1,75 @@
-(function() {
-    var pressedKeys = {};
+(function () {
+  "use strict";
 
-    function setKey(event, status) {
-        var code = event.keyCode;
-        var key;
+  var pressedKeys = {};
+  var aliases = {
+    ArrowLeft: "LEFT",
+    KeyA: "LEFT",
+    ArrowRight: "RIGHT",
+    KeyD: "RIGHT",
+    ArrowUp: "UP",
+    KeyW: "UP",
+    ArrowDown: "DOWN",
+    KeyS: "DOWN",
+    Space: "JUMP",
+    KeyX: "JUMP",
+    ShiftLeft: "RUN",
+    ShiftRight: "RUN",
+    KeyZ: "RUN",
+    KeyF: "ACTION",
+    KeyE: "INTERACT",
+    Escape: "PAUSE",
+    KeyM: "MUTE",
+    F11: "FULLSCREEN"
+  };
 
-        switch(code) {
-        case 32:
-            key = 'SPACE'; break;
-        case 37:
-            key = 'LEFT'; break;
-        case 38:
-            key = 'UP'; break;
-        case 39:
-            key = 'RIGHT'; break;
-        case 40:
-            key = 'DOWN'; break;
-        case 88:
-            key = 'JUMP'; break;
-        case 90:
-            key = 'RUN'; break;
-        default:
-            key = String.fromCharCode(code);
-        }
+  function keyFor(event) {
+    if (aliases[event.code]) return aliases[event.code];
+    if (event.key && event.key.length === 1) return event.key.toUpperCase();
+    return event.key || "";
+  }
 
-        pressedKeys[key] = status;
+  function shouldBlockScroll(key) {
+    return ["LEFT", "RIGHT", "UP", "DOWN", "JUMP", "RUN"].indexOf(key) !== -1;
+  }
+
+  function setKey(event, status) {
+    var key = keyFor(event);
+    if (!key) return;
+    pressedKeys[key] = status;
+    if (status && shouldBlockScroll(key)) event.preventDefault();
+    if (status && key === "FULLSCREEN") {
+      window.dispatchEvent(new CustomEvent("pqd:fullscreen-shortcut"));
     }
+    if (status && key === "PAUSE") {
+      window.dispatchEvent(new CustomEvent("pqd:pause-shortcut"));
+      event.preventDefault();
+    }
+    if (status && key === "MUTE" && !event.repeat) {
+      window.dispatchEvent(new CustomEvent("pqd:mute-shortcut"));
+    }
+  }
 
-    document.addEventListener('keydown', function(e) {
-        setKey(e, true);
-    });
+  document.addEventListener("keydown", function (event) { setKey(event, true); }, { passive: false });
+  document.addEventListener("keyup", function (event) { setKey(event, false); }, { passive: false });
+  window.addEventListener("blur", function () { pressedKeys = {}; });
 
-    document.addEventListener('keyup', function(e) {
-        setKey(e, false);
-    });
-
-    window.addEventListener('blur', function() {
-        pressedKeys = {};
-    });
-
-    window.input = {
-        isDown: function(key) {
-            return pressedKeys[key.toUpperCase()];
-        },
-        reset: function() {
-          pressedKeys['RUN'] = false;
-          pressedKeys['LEFT'] = false;
-          pressedKeys['RIGHT'] = false;
-          pressedKeys['DOWN'] = false;
-          pressedKeys['JUMP'] = false;
-        }
-    };
+  window.input = {
+    isDown: function (key) {
+      return !!pressedKeys[String(key).toUpperCase()];
+    },
+    snapshot: function () {
+      return {
+        left: !!pressedKeys.LEFT,
+        right: !!pressedKeys.RIGHT,
+        jump: !!pressedKeys.JUMP,
+        run: !!pressedKeys.RUN,
+        action: !!pressedKeys.ACTION,
+        interact: !!pressedKeys.INTERACT
+      };
+    },
+    reset: function () {
+      pressedKeys = {};
+    }
+  };
 })();

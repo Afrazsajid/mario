@@ -1,44 +1,73 @@
-﻿<!DOCTYPE html>
-<html>
+<!DOCTYPE html>
+<html lang="en">
   <head>
     <meta charset="utf-8">
-
-    <!-- The actual resolution of the NES is 256x240.
-         Ideally, we draw in this size and scale appropriately.-->
-    <title>Super Mario Bros</title>
-    <meta name="description" content="">
-    <meta name="viewport" content="width=device-width">
-
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="Pixel Quest Duo is a private-room two-player online platform game.">
+    <title>Pixel Quest Duo</title>
     <link rel="stylesheet" href="css/game.css">
   </head>
   <body>
-    <script type="text/javascript" src="js/util.js"></script>
-    <script type="text/javascript" src="js/input.js"></script>
-    <script type="text/javascript" src="js/resources.js"></script>
-    <script type="text/javascript" src="js/sprite.js"></script>
-    <script type="text/javascript" src="js/entity.js"></script>
-    <script type="text/javascript" src="js/pipe.js"></script>
-    <script type="text/javascript" src="js/mushroom.js"></script>
-    <script type="text/javascript" src="js/fireflower.js"></script>
-    <script type="text/javascript" src="js/star.js"></script>
-    <script type="text/javascript" src="js/fireball.js"></script>
-    <script type="text/javascript" src="js/coin.js"></script>
-    <script type="text/javascript" src="js/bcoin.js"></script>
-    <script type="text/javascript" src="js/goomba.js"></script>
-    <script type="text/javascript" src="js/koopa.js"></script>
-    <script type="text/javascript" src="js/floor.js"></script>
-    <script type="text/javascript" src="js/block.js"></script>
-    <script type="text/javascript" src="js/rubble.js"></script>
-    <script type="text/javascript" src="js/prop.js"></script>
-    <script type="text/javascript" src="js/player.js"></script>
-    <script type="text/javascript" src="js/flag.js"></script>
-    <script type="text/javascript" src="js/levels/level.js"></script>
-    <script type="text/javascript" src="js/levels/11.js"></script>
-    <script type="text/javascript" src="js/levels/11tunnel.js"></script>
-    <script type="text/javascript" src="js/game.js"></script>
-    <div class="info">
-      <p class="controls">Move: Arrow Keys, Jump: X, Run: Z</p>
-      <div class="links">My Links <br><a href="http://garrettjohnson.net">Portfolio</a> <a href="http://linkedin.com/in/garretttjohnson">LinkedIn</a> <a href="https://github.com/reruns">github</a><div>
+    <div id="app" class="app-shell">
+      <canvas id="gameCanvas" class="game-canvas" aria-label="Pixel Quest Duo game world"></canvas>
+      <div class="parallax" aria-hidden="true">
+        <span class="cloud cloud-a"></span>
+        <span class="cloud cloud-b"></span>
+        <span class="cloud cloud-c"></span>
+      </div>
+
+      <main id="screenLayer" class="screen-layer" aria-live="polite"></main>
+
+      <section id="hud" class="hud hidden" aria-label="Match status">
+        <article class="hud-card" id="hudP1"></article>
+        <article class="hud-center">
+          <strong id="matchTimer">4:00</strong>
+          <span id="levelTitle">Skyline Sprint 1-1</span>
+          <div class="progress-track"><span id="teamProgress"></span></div>
+          <small id="roomHud">Room ------</small>
+        </article>
+        <article class="hud-card" id="hudP2"></article>
+      </section>
+
+      <div id="toastRegion" class="toast-region" aria-live="polite"></div>
+      <div id="pauseOverlay" class="overlay hidden" role="dialog" aria-modal="true" aria-labelledby="pauseTitle"></div>
+      <div id="countdown" class="countdown hidden" aria-live="assertive"></div>
+      <div id="srStatus" class="sr-only" aria-live="polite"></div>
     </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="shared/constants.js"></script>
+    <script src="shared/protocol.js"></script>
+    <script src="shared/scoring.js"></script>
+    <script src="shared/validation.js"></script>
+    <script src="shared/levelData.js"></script>
+    <script src="shared/physics.js"></script>
+    <script src="js/util.js"></script>
+    <script src="js/input.js"></script>
+    <script src="js/resources.js"></script>
+    <script src="js/sprite.js"></script>
+    <script src="js/entity.js"></script>
+    <script src="js/pipe.js"></script>
+    <script src="js/mushroom.js"></script>
+    <script src="js/fireflower.js"></script>
+    <script src="js/star.js"></script>
+    <script src="js/fireball.js"></script>
+    <script src="js/coin.js"></script>
+    <script src="js/bcoin.js"></script>
+    <script src="js/goomba.js"></script>
+    <script src="js/koopa.js"></script>
+    <script src="js/floor.js"></script>
+    <script src="js/block.js"></script>
+    <script src="js/rubble.js"></script>
+    <script src="js/prop.js"></script>
+    <script src="js/player.js"></script>
+    <script src="js/flag.js"></script>
+    <script src="js/levels/level.js"></script>
+    <script src="js/levels/11.js"></script>
+    <script src="js/levels/11tunnel.js"></script>
+    <script src="client/multiplayer/interpolation.js"></script>
+    <script src="client/multiplayer/prediction.js"></script>
+    <script src="client/multiplayer/networkClient.js"></script>
+    <script src="js/game.js"></script>
   </body>
 </html>
