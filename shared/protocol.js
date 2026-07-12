@@ -31,6 +31,9 @@
     GAME_EVENT: "game:event",
     PLAYER_FINISHED: "game:playerFinished",
     GAME_OVER: "game:over",
+    ROUND_GAME_OVER: "round:gameOver",
+    ROUND_RESET: "round:reset",
+    ROUND_START: "round:start",
     RESTART_STATUS: "game:restartStatus",
     QUALITY: "connection:quality",
     PONG: "connection:pong"

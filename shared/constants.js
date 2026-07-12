@@ -13,6 +13,26 @@
     CLOSED: "CLOSED"
   });
 
+  var ROUND_STATES = Object.freeze({
+    WAITING: "waiting",
+    COUNTDOWN: "countdown",
+    PLAYING: "playing",
+    PLAYER_ELIMINATED: "player_eliminated",
+    LEVEL_COMPLETE: "level_complete",
+    GAME_OVER: "game_over",
+    RESTARTING: "restarting",
+    RESULTS: "results"
+  });
+
+  var PLAYER_STATES = Object.freeze({
+    ACTIVE: "active",
+    DYING: "dying",
+    ELIMINATED: "eliminated",
+    SPECTATING: "spectating",
+    FINISHED: "finished",
+    DISCONNECTED: "disconnected"
+  });
+
   var CHARACTERS = Object.freeze({
     nova: {
       id: "nova",
@@ -37,6 +57,8 @@
   return Object.freeze({
     GAME_TITLE: "Pixel Quest Duo",
     ROOM_STATUS: ROOM_STATUS,
+    ROUND_STATES: ROUND_STATES,
+    PLAYER_STATES: PLAYER_STATES,
     ROOM_CODE_LENGTH: 6,
     ROOM_CODE_ALPHABET: "ABCDEFGHJKLMNPQRSTUVWXYZ23456789",
     ROOM_CAPACITY: 2,
@@ -45,6 +67,10 @@
     SERVER_TICK_RATE: 30,
     SNAPSHOT_RATE: 20,
     MATCH_SECONDS: 240,
+    DEATH_ANIMATION_MS: 1200,
+    GAME_OVER_PRESENTATION_MS: 2000,
+    GAME_OVER_RESTART_MS: 5000,
+    ROUND_RESTART_COUNTDOWN_MS: 3000,
     LOGICAL_WIDTH: 384,
     LOGICAL_HEIGHT: 216,
     TILE_SIZE: 16,

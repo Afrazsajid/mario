@@ -57,6 +57,9 @@
   var resultState = null;
   var paused = false;
   var lastInputSentAt = 0;
+  var lastRoundId = null;
+  var gameOverScreen = null;
+  var spectatorBanner = null;
 
   var sounds = {};
   var music = {};
@@ -67,7 +70,8 @@
     "sprites/enemyr.png",
     "sprites/tiles.png",
     "sprites/items.png",
-    "sprites/cloud-transparent.png"
+    "sprites/cloud-transparent.png",
+    "sprites/game-over-title.png"
   ];
 
   function el(tag, className, text) {
@@ -140,7 +144,7 @@
       music[key].loop = key !== "clear";
       music[key].volume = muted ? 0 : musicVolume;
     });
-    ["coin", "stomp", "jump-small", "powerup", "flagpole", "pipe", "kick"].forEach(function (name) {
+    ["coin", "stomp", "jump-small", "powerup", "flagpole", "pipe", "kick", "mariodie"].forEach(function (name) {
       sounds[name] = new Audio("sounds/" + name + (name.indexOf("jump") === 0 ? ".wav" : ".wav"));
       sounds[name].volume = muted ? 0 : effectsVolume;
     });
@@ -491,13 +495,18 @@
     appState = "game";
     paused = false;
     snapshot = initialSnapshot;
+    lastRoundId = initialSnapshot && initialSnapshot.roundId ? initialSnapshot.roundId : lastRoundId;
+    world = levelData.createWorld();
+    prediction = window.PQDPrediction.createPrediction(world, physics);
     prediction.clear();
     var me = playerSnapshot(playerId);
-    if (me) prediction.setAuthoritative(me.state, me.inputAck || 0);
+    if (me && isControllablePlayer(me)) prediction.setAuthoritative(me.state, me.inputAck || 0);
     clear(screenLayer);
     hud.classList.remove("hidden");
     pauseOverlay.classList.add("hidden");
     countdownEl.classList.add("hidden");
+    if (gameOverScreen) gameOverScreen.hide();
+    if (spectatorBanner) spectatorBanner.classList.add("hidden");
     displayPlayers = {};
     music.overworld.play().catch(function () {});
     toast("GO!");
@@ -505,6 +514,60 @@
 
   function playerSnapshot(id) {
     return snapshot && snapshot.players ? snapshot.players.find(function (player) { return player.id === id; }) : null;
+  }
+
+  function isRoundPlaying() {
+    return snapshot && snapshot.roundState === constants.ROUND_STATES.PLAYING;
+  }
+
+  function isControllablePlayer(player) {
+    return player && player.state && player.state.playerState === constants.PLAYER_STATES.ACTIVE;
+  }
+
+  function localPlayerCanControl() {
+    return appState === "game" && !paused && isRoundPlaying() && isControllablePlayer(playerSnapshot(playerId));
+  }
+
+  function activePlayerToWatch() {
+    if (!snapshot || !snapshot.players) return null;
+    return snapshot.players.find(function (player) {
+      return player.state && player.state.playerState === constants.PLAYER_STATES.ACTIVE;
+    }) || null;
+  }
+
+  function resetClientRound(next) {
+    world = levelData.createWorld();
+    prediction = window.PQDPrediction.createPrediction(world, physics);
+    prediction.clear();
+    displayPlayers = {};
+    input.reset();
+    inputSequence = 0;
+    lastRoundId = next.roundId || lastRoundId;
+    if (gameOverScreen) gameOverScreen.hide();
+    if (spectatorBanner) spectatorBanner.classList.add("hidden");
+  }
+
+  function createSpectatorBanner() {
+    var banner = el("div", "spectator-banner hidden");
+    banner.appendChild(el("strong", "", "Spectating"));
+    banner.appendChild(el("span", "muted", "Watching the run"));
+    document.getElementById("app").appendChild(banner);
+    return banner;
+  }
+
+  function updateSpectatorBanner() {
+    if (!spectatorBanner || !snapshot || !snapshot.players) return;
+    var me = playerSnapshot(playerId);
+    var spectating = me && me.state && me.state.playerState === constants.PLAYER_STATES.SPECTATING;
+    spectatorBanner.classList.toggle("hidden", !spectating);
+    if (!spectating) return;
+    var watched = activePlayerToWatch();
+    spectatorBanner.children[1].textContent = watched ? "Watching " + watched.name : "Waiting for restart";
+  }
+
+  function updateRoundPresentation() {
+    if (gameOverScreen) gameOverScreen.update(snapshot, room ? room.roomCode : roomCode);
+    updateSpectatorBanner();
   }
 
   function showResults(result) {
@@ -637,6 +700,13 @@
       if (data.remaining <= 0) setTimeout(function () { countdownEl.classList.add("hidden"); }, 700);
     });
     network.on(S.GAME_START, enterGame);
+    network.on(S.ROUND_RESET, function (next) {
+      handleSnapshot(next);
+    });
+    network.on(S.ROUND_GAME_OVER, function (event) {
+      if (snapshot && event.roundId && event.roundId !== snapshot.roundId) return;
+      if (gameOverScreen) gameOverScreen.update(snapshot, room ? room.roomCode : roomCode);
+    });
     network.on(S.SNAPSHOT, handleSnapshot);
     network.on(S.GAME_EVENT, handleGameEvent);
     network.on(S.GAME_OVER, showResults);
@@ -648,21 +718,45 @@
   }
 
   function handleSnapshot(next) {
+    var previousRoundId = snapshot && snapshot.roundId;
     snapshot = next;
+    if (next && next.roundId && previousRoundId && next.roundId !== previousRoundId) resetClientRound(next);
+    else if (next && next.roundId && !lastRoundId) lastRoundId = next.roundId;
     var me = playerSnapshot(playerId);
-    if (me) prediction.setAuthoritative(me.state, me.inputAck || 0);
+    if (me && localPlayerCanControl()) prediction.setAuthoritative(me.state, me.inputAck || 0);
+    else {
+      prediction.clear();
+      input.reset();
+    }
+    updateRoundPresentation();
   }
 
   function handleGameEvent(event) {
+    if (snapshot && event.roundId && event.roundId !== snapshot.roundId) return;
+    var player = snapshot && snapshot.players ? snapshot.players.find(function (p) { return p.id === event.playerId; }) : null;
+    if (event.type === "player:dying") {
+      playSound("mariodie");
+      toast((player ? player.name : "Player") + " is out.");
+      return;
+    }
+    if (event.type === "player:spectating") return;
+    if (event.type === "round:lastPlayer") {
+      toast((player ? player.name : "Player") + " is the last runner.");
+      return;
+    }
+    if (event.type === "round:gameOver" || event.type === "round:restarting") {
+      updateRoundPresentation();
+      return;
+    }
     if (event.type === "coin") playSound("coin");
     if (event.type.indexOf("enemy") === 0) playSound("stomp");
+    if (typeof event.delta !== "number") return;
     if (event.delta > 0) camera.shake = Math.max(camera.shake, 1.4);
-    var player = snapshot && snapshot.players ? snapshot.players.find(function (p) { return p.id === event.playerId; }) : null;
     toast((player ? player.name : "Player") + " +" + event.delta);
   }
 
   function sendInput(now) {
-    if (appState !== "game" || paused || !snapshot || now - lastInputSentAt < 1000 / 60) return;
+    if (!localPlayerCanControl() || now - lastInputSentAt < 1000 / 60) return;
     lastInputSentAt = now;
     var packet = input.snapshot();
     packet.sequence = ++inputSequence;
@@ -675,6 +769,7 @@
 
   function updateHud() {
     if (!snapshot || !snapshot.players) return;
+    updateRoundPresentation();
     var p1 = snapshot.players[0];
     var p2 = snapshot.players[1];
     renderHudCard(hudP1, p1, p1 && p2 && p1.stats.score >= p2.stats.score);
@@ -684,7 +779,7 @@
     levelTitle.textContent = snapshot.level ? snapshot.level.title : world.title;
     var maxProgress = 0;
     snapshot.players.forEach(function (player) {
-      maxProgress = Math.max(maxProgress, Math.min(100, (player.state.x / world.finishX) * 100));
+      if (player.state) maxProgress = Math.max(maxProgress, Math.min(100, (player.state.x / world.finishX) * 100));
     });
     teamProgress.style.width = maxProgress + "%";
     roomHud.textContent = "Room " + (room ? room.roomCode : roomCode || "------");
@@ -699,6 +794,7 @@
     }
     target.classList.toggle("leader", !!leader);
     target.appendChild(el("strong", "", player.name + (leader ? " crown" : "")));
+    target.appendChild(el("span", "badge", player.state && player.state.playerState ? player.state.playerState : "active"));
     [
       ["Score", player.stats.score],
       ["Coins", player.stats.coins],
@@ -715,6 +811,17 @@
   function cameraTarget() {
     var me = playerSnapshot(playerId);
     if (!me) return { x: 0, y: 0, facing: 1, vx: 0 };
+    if (me.state && (
+      me.state.playerState === constants.PLAYER_STATES.ACTIVE ||
+      me.state.playerState === constants.PLAYER_STATES.DYING ||
+      me.state.playerState === constants.PLAYER_STATES.FINISHED
+    )) return me.state;
+    var watched = activePlayerToWatch();
+    if (watched && watched.state) return watched.state;
+    var visible = snapshot && snapshot.players ? snapshot.players.find(function (player) {
+      return player.state && player.state.playerState !== constants.PLAYER_STATES.SPECTATING;
+    }) : null;
+    if (visible) return visible.state;
     return me.state;
   }
 
@@ -876,6 +983,7 @@
     if (!snapshot || !snapshot.players) return;
     var remote = snapshot.players.find(function (player) { return player.id !== playerId; });
     if (!remote || !remote.state) return;
+    if (remote.state.playerState === constants.PLAYER_STATES.SPECTATING || remote.state.playerState === constants.PLAYER_STATES.ELIMINATED) return;
     if (visiblePlayers.some(function (player) { return player.id === remote.id; })) return;
     var x = worldX(remote.state.x);
     var safeY = 54;
@@ -918,6 +1026,8 @@
   function init() {
     resizeCanvas();
     initAudio();
+    gameOverScreen = window.PQDGameOverScreen.create({ parent: document.getElementById("app"), constants: constants });
+    spectatorBanner = createSpectatorBanner();
     setupNetwork();
     showLoading();
     resources.load(assetList);

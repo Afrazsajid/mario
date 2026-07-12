@@ -31,6 +31,13 @@
       jumpHeld: false,
       dead: false,
       invulnerableUntil: 0,
+      playerState: constants.PLAYER_STATES ? constants.PLAYER_STATES.ACTIVE : "active",
+      isAlive: true,
+      isEliminated: false,
+      isSpectating: false,
+      deathReason: null,
+      deathStartedAt: null,
+      deathAnimationEndsAt: null,
       form: "small",
       pendingForm: null,
       temporaryEffect: "none",
@@ -85,7 +92,7 @@
   }
 
   function stepPlayer(state, input, dt, world) {
-    if (state.dead || state.finished) return state;
+    if (state.dead || state.finished || state.playerState && state.playerState !== "active") return state;
     input = input || {};
     var dir = (input.right ? 1 : 0) - (input.left ? 1 : 0);
     var maxSpeed = input.run ? RUN_SPEED : WALK_SPEED;

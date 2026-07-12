@@ -43,6 +43,7 @@ class Room {
       ready: player.ready,
       ping: player.ping,
       reconnectingUntil: player.reconnectingUntil || null,
+      state: player.state || null,
       stats: player.stats || scoring.createStats(),
       restartVote: !!player.restartVote
     };
@@ -54,6 +55,8 @@ class Room {
       status: this.status,
       hostId: this.hostId,
       autoStart: this.autoStart,
+      roundState: this.game ? this.game.roundState : null,
+      roundId: this.game ? this.game.roundId : null,
       players: Array.from(this.players.values()).map((player) => this.publicPlayer(player)),
       canStart: this.canStart(),
       inviteUrl: `/?room=${this.code}`
