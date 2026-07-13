@@ -7,8 +7,14 @@
 
   function smoothPlayer(display, target, amount) {
     if (!display || !target) return target;
+    var previousHeight = display.h || target.h || 0;
+    var nextHeight = target.h || previousHeight;
+    var previousFeetY = (display.y || 0) + previousHeight;
     display.x = lerp(display.x, target.x, amount);
     display.y = lerp(display.y, target.y, amount);
+    display.w = target.w;
+    display.h = nextHeight;
+    if (previousHeight !== nextHeight) display.y = previousFeetY - nextHeight;
     display.vx = target.vx;
     display.vy = target.vy;
     display.facing = target.facing;

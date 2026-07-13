@@ -11,16 +11,16 @@
     finished: 192
   };
 
-  var BASE_ROWS = {
+  var BASE_FRAMES = {
     mario: {
-      small: 32,
-      super: 0,
-      fire: 96
+      small: { sy: 32, sh: 16, dh: 16 },
+      super: { sy: 0, sh: 32, dh: 32 },
+      fire: { sy: 96, sh: 32, dh: 32 }
     },
     luigi: {
-      small: 80,
-      super: 48,
-      fire: 96
+      small: { sy: 80, sh: 16, dh: 16 },
+      super: { sy: 48, sh: 32, dh: 32 },
+      fire: { sy: 96, sh: 32, dh: 32 }
     }
   };
 
@@ -64,13 +64,18 @@
     return def && def.atlasId ? def.atlasId : characterId === "bolt" ? "luigi" : "mario";
   }
 
-  function rowFor(atlasId, form, temporaryEffect, frameIndex) {
+  function frameBandFor(atlasId, form, temporaryEffect, frameIndex) {
     var safeForm = form === "fire" || form === "super" ? form : "small";
+    var band = BASE_FRAMES[atlasId][safeForm] || BASE_FRAMES[atlasId].small;
     if (temporaryEffect === "star") {
       var rows = STAR_ROWS[atlasId][safeForm] || STAR_ROWS[atlasId].small;
-      return rows[Math.floor(frameIndex / 4) % rows.length];
+      return {
+        sy: rows[Math.floor(frameIndex / 4) % rows.length],
+        sh: band.sh,
+        dh: band.dh
+      };
     }
-    return BASE_ROWS[atlasId][safeForm] || BASE_ROWS[atlasId].small;
+    return band;
   }
 
   function getPlayerFrame(options) {
@@ -88,15 +93,15 @@
     else if (animation === "dead") sx = FRAME_X.dead;
     else if (animation === "finished") sx = FRAME_X.finished;
 
-    var tall = form === "super" || form === "fire";
+    var band = frameBandFor(atlasId, form, options.temporaryEffect, frameIndex);
     return {
       image: direction === "left" ? "sprites/playerl.png" : "sprites/player.png",
       sx: sx,
-      sy: rowFor(atlasId, form, options.temporaryEffect, frameIndex),
+      sy: band.sy,
       sw: 16,
-      sh: tall ? 32 : 16,
+      sh: band.sh,
       dw: 16,
-      dh: tall ? 32 : 16,
+      dh: band.dh,
       drawOffsetX: -1,
       drawOffsetY: 0,
       hidden: options.temporaryEffect === "damageInvulnerability" && Math.floor(frameIndex * 2) % 4 === 0
@@ -105,7 +110,7 @@
 
   root.PQDSpriteAtlas = {
     DEBUG_HITBOXES: DEBUG_HITBOXES,
-    PLAYER_FRAMES: { baseRows: BASE_ROWS, starRows: STAR_ROWS, frameX: FRAME_X },
+    PLAYER_FRAMES: { baseFrames: BASE_FRAMES, starRows: STAR_ROWS, frameX: FRAME_X },
     TILE_FRAMES: TILE_FRAMES,
     getPlayerFrame: getPlayerFrame,
     characterAtlasId: characterAtlasId
