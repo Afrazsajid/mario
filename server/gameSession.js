@@ -12,6 +12,8 @@ class GameSession {
     this.world = levelData.createWorld();
     this.roundId = 1;
     this.roundState = constants.ROUND_STATES.PLAYING;
+    this.currentCheckpointId = null;
+    this.currentCheckpointSpawn = null;
     this.tick = 0;
     this.startedAt = Date.now();
     this.remainingSeconds = constants.MATCH_SECONDS;
@@ -29,10 +31,14 @@ class GameSession {
 
   resetPlayers(options = {}) {
     const resetStats = options.resetStats !== false;
+    const useCheckpoint = !!options.useCheckpoint && this.currentCheckpointSpawn;
     let index = 0;
     this.room.players.forEach((player) => {
       player.slot = index;
-      player.state = physics.createPlayerState(this.world.spawnPoints[index], index);
+      const spawn = useCheckpoint
+        ? { x: this.currentCheckpointSpawn.x + index * 18, y: this.currentCheckpointSpawn.y }
+        : this.world.spawnPoints[index];
+      player.state = physics.createPlayerState(spawn, index);
       player.input = { sequence: 0 };
       player.lastLaserFiredAt = 0;
       player.fireHeld = false;
@@ -80,6 +86,7 @@ class GameSession {
     if (this.roundState !== constants.ROUND_STATES.PLAYING && this.roundState !== constants.ROUND_STATES.PLAYER_ELIMINATED) return;
     this.remainingSeconds = Math.max(0, constants.MATCH_SECONDS - Math.floor((now - this.startedAt) / 1000));
 
+    this.stepMovingPlatforms(dt);
     this.world.enemies.forEach((enemy) => physics.stepEnemy(enemy, dt, this.world));
     this.stepLasers(dt, now);
     this.room.players.forEach((player) => {
@@ -110,6 +117,7 @@ class GameSession {
       }
 
       this.collectWorldObjects(player);
+      this.checkCheckpoints(player);
       this.checkEnemyCollisions(player);
     });
 
@@ -132,6 +140,60 @@ class GameSession {
         this.applyPowerUp(player, power.type);
         this.score(player, power.type === "star" ? "star" : power.type === "fireFlower" ? "fireFlower" : "mushroom");
       }
+    });
+  }
+
+  checkCheckpoints(player) {
+    const box = player.state;
+    if (!box || box.playerState !== constants.PLAYER_STATES.ACTIVE) return;
+    this.world.checkpoints.forEach((checkpoint) => {
+      if (checkpoint.activated || !physics.overlaps(box, checkpoint)) return;
+      checkpoint.activated = true;
+      checkpoint.activatedBy = player.id;
+      checkpoint.activatedAt = Date.now();
+      this.currentCheckpointId = checkpoint.id;
+      this.currentCheckpointSpawn = { x: checkpoint.spawnX, y: checkpoint.spawnY };
+      this.score(player, "checkpoint");
+      this.emitRoom("game:event", {
+        id: `${this.roundId}-${this.tick}-${checkpoint.id}`,
+        roundId: this.roundId,
+        playerId: player.id,
+        checkpointId: checkpoint.id,
+        type: "checkpoint:activated",
+        x: checkpoint.x,
+        y: checkpoint.y
+      });
+    });
+  }
+
+  stepMovingPlatforms(dt) {
+    if (!this.world.movingPlatforms || !this.world.movingPlatforms.length) return;
+    this.world.movingPlatforms.forEach((platform) => {
+      const previousX = platform.x;
+      platform.x += platform.vx * dt;
+      if (platform.x <= platform.minX) {
+        platform.x = platform.minX;
+        platform.vx = Math.abs(platform.vx);
+      } else if (platform.x >= platform.maxX) {
+        platform.x = platform.maxX;
+        platform.vx = -Math.abs(platform.vx);
+      }
+      this.carryPlayersOnPlatform(platform, platform.x - previousX);
+    });
+    if (levelData.syncSolids) levelData.syncSolids(this.world);
+  }
+
+  carryPlayersOnPlatform(platform, deltaX) {
+    if (!deltaX) return;
+    this.room.players.forEach((player) => {
+      const state = player.state;
+      if (!state || state.playerState !== constants.PLAYER_STATES.ACTIVE) return;
+      const feetY = state.y + state.h;
+      const onTop = Math.abs(feetY - platform.y) <= 2 &&
+        state.x + state.w > platform.x &&
+        state.x < platform.x + platform.w;
+      if (!onTop) return;
+      state.x = Math.max(0, Math.min(this.world.width - state.w, state.x + deltaX));
     });
   }
 
@@ -506,6 +568,13 @@ class GameSession {
     if (this.roundState === constants.ROUND_STATES.COUNTDOWN) return;
     this.roundId += 1;
     this.world = levelData.createWorld();
+    if (this.currentCheckpointId) {
+      const checkpoint = this.world.checkpoints.find((item) => item.id === this.currentCheckpointId);
+      if (checkpoint) {
+        checkpoint.activated = true;
+        this.currentCheckpointSpawn = { x: checkpoint.spawnX, y: checkpoint.spawnY };
+      }
+    }
     this.tick = 0;
     this.startedAt = Date.now() + constants.ROUND_RESTART_COUNTDOWN_MS;
     this.remainingSeconds = constants.MATCH_SECONDS;
@@ -519,7 +588,7 @@ class GameSession {
     this.restartAt = null;
     this.roundStartsAt = Date.now() + constants.ROUND_RESTART_COUNTDOWN_MS;
     this.roundState = constants.ROUND_STATES.COUNTDOWN;
-    this.resetPlayers({ resetStats: true });
+    this.resetPlayers({ resetStats: true, useCheckpoint: true });
     this.emitRoom("round:reset", this.snapshot());
     this.emitRoom("game:countdown", { remaining: 3, roundId: this.roundId, roundStartsAt: this.roundStartsAt });
   }
@@ -567,7 +636,15 @@ class GameSession {
       restartAt: this.restartAt,
       roundStartsAt: this.roundStartsAt,
       remainingSeconds: this.remainingSeconds,
-      level: { id: this.world.id, title: this.world.title, width: this.world.width, finishX: this.world.finishX, theme: this.world.theme },
+      currentCheckpointId: this.currentCheckpointId,
+      level: {
+        id: this.world.id,
+        title: this.world.title,
+        width: this.world.width,
+        finishX: this.world.finishX,
+        theme: this.world.theme,
+        sections: this.world.sections
+      },
       players: Array.from(this.room.players.values()).map((player) => ({
         id: player.id,
         slot: player.slot,
@@ -584,6 +661,22 @@ class GameSession {
       coins: this.world.coins.filter((coin) => coin.collectedBy).map((coin) => ({ id: coin.id, collectedBy: coin.collectedBy })),
       powerUps: this.world.powerUps.filter((power) => power.collectedBy).map((power) => ({ id: power.id, collectedBy: power.collectedBy })),
       enemies: this.world.enemies.map((enemy) => ({ id: enemy.id, x: enemy.x, y: enemy.y, alive: enemy.alive, type: enemy.type })),
+      checkpoints: this.world.checkpoints.map((checkpoint) => ({
+        id: checkpoint.id,
+        x: checkpoint.x,
+        y: checkpoint.y,
+        activated: !!checkpoint.activated,
+        activatedBy: checkpoint.activatedBy || null,
+        sectionId: checkpoint.sectionId
+      })),
+      movingPlatforms: this.world.movingPlatforms.map((platform) => ({
+        id: platform.id,
+        x: platform.x,
+        y: platform.y,
+        w: platform.w,
+        h: platform.h,
+        vx: platform.vx
+      })),
       lasers: this.lasers.map((laser) => ({
         id: laser.id,
         ownerId: laser.ownerId,

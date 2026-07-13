@@ -758,6 +758,12 @@
       updateRoundPresentation();
       return;
     }
+    if (event.type === "checkpoint:activated") {
+      playSound("powerup");
+      camera.shake = Math.max(camera.shake, 1);
+      toast((player ? player.name : "Player") + " reached a checkpoint.");
+      return;
+    }
     if (event.type === "laser:fire") {
       playSound("fireball");
       return;
@@ -921,6 +927,7 @@
     });
     var tiles = resources.get("sprites/tiles.png");
     world.solids.forEach(function (solid) {
+      if (solid.type === "movingPlatform") return;
       if (solid.x + solid.w < camera.x || solid.x > camera.x + constants.LOGICAL_WIDTH) return;
       for (var x = solid.x; x < solid.x + solid.w; x += 16) {
         for (var y = solid.y; y < solid.y + solid.h; y += 16) {
@@ -928,8 +935,35 @@
         }
       }
     });
+    drawMovingPlatforms(tiles);
+    drawCheckpoints(tiles);
     ctx.fillStyle = "#35E4D0";
     ctx.fillRect(worldX(world.finishX), worldY(45), 2, 150);
+  }
+
+  function drawMovingPlatforms(tiles) {
+    if (!tiles || !snapshot || !snapshot.movingPlatforms) return;
+    var frame = window.PQDSpriteAtlas.TILE_FRAMES.usedBrown;
+    snapshot.movingPlatforms.forEach(function (platform) {
+      if (platform.x + platform.w < camera.x || platform.x > camera.x + constants.LOGICAL_WIDTH) return;
+      for (var x = platform.x; x < platform.x + platform.w; x += 16) {
+        drawTile(tiles, frame, x, platform.y);
+      }
+    });
+  }
+
+  function drawCheckpoints(tiles) {
+    if (!snapshot || !snapshot.checkpoints) return;
+    snapshot.checkpoints.forEach(function (checkpoint) {
+      if (checkpoint.x + 24 < camera.x || checkpoint.x > camera.x + constants.LOGICAL_WIDTH) return;
+      var x = worldX(checkpoint.x);
+      var y = worldY(checkpoint.y);
+      ctx.fillStyle = checkpoint.activated ? "#FFD85A" : "#F7FBFF";
+      ctx.fillRect(x + 6, y, 2, 32);
+      ctx.fillStyle = checkpoint.activated ? "#35E4D0" : "#FF6B6B";
+      ctx.fillRect(x + 8, y + 2, 14, 8);
+      if (tiles) drawTile(tiles, window.PQDSpriteAtlas.TILE_FRAMES.usedBrown, checkpoint.x - 1, checkpoint.y + 32);
+    });
   }
 
   function drawEntities() {
