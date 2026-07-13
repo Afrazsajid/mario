@@ -17,6 +17,7 @@ test("malformed input packets are rejected", () => {
   assert.equal(validation.sanitizeInputPacket({ sequence: 1, x: 99 }).ok, false);
   assert.equal(validation.sanitizeInputPacket({ sequence: -1 }).ok, false);
   assert.equal(validation.sanitizeInputPacket({ sequence: 42, left: true }).value.left, true);
+  assert.equal(validation.sanitizeInputPacket({ sequence: 43, fire: true }).value.fire, true);
 });
 
 test("excessive input rate is limited", () => {

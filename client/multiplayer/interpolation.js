@@ -28,6 +28,8 @@
     display.pendingForm = target.pendingForm;
     display.temporaryEffect = target.temporaryEffect;
     display.effectExpiresAt = target.effectExpiresAt;
+    display.shootingUntil = target.shootingUntil;
+    display.shootingUntilLocal = target.shootingUntilLocal;
     display.isInvulnerable = target.isInvulnerable;
     display.animation = target.animation;
     display.animationFrame = target.animationFrame;

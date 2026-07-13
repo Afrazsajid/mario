@@ -17,6 +17,8 @@ class GameSession {
     this.remainingSeconds = constants.MATCH_SECONDS;
     this.lastSnapshotAt = 0;
     this.events = [];
+    this.lasers = [];
+    this.nextLaserId = 1;
     this.firstFinishAwarded = false;
     this.gameOverStarted = false;
     this.gameOverStartedAt = null;
@@ -32,6 +34,8 @@ class GameSession {
       player.slot = index;
       player.state = physics.createPlayerState(this.world.spawnPoints[index], index);
       player.input = { sequence: 0 };
+      player.lastLaserFiredAt = 0;
+      player.fireHeld = false;
       if (resetStats || !player.stats) player.stats = scoring.createStats();
       player.restartVote = false;
       index += 1;
@@ -77,6 +81,7 @@ class GameSession {
     this.remainingSeconds = Math.max(0, constants.MATCH_SECONDS - Math.floor((now - this.startedAt) / 1000));
 
     this.world.enemies.forEach((enemy) => physics.stepEnemy(enemy, dt, this.world));
+    this.stepLasers(dt, now);
     this.room.players.forEach((player) => {
       if (!player.connected) return;
       this.updatePowerTimers(player);
@@ -86,6 +91,7 @@ class GameSession {
       const previousDead = player.state.dead;
       const previousFinished = player.state.finished;
       physics.stepPlayer(player.state, player.input || {}, dt, this.world);
+      this.handleFireInput(player, now);
 
       if (player.state.dead && !previousDead) {
         this.eliminatePlayer(player, "fall");
@@ -212,6 +218,128 @@ class GameSession {
     });
   }
 
+  activeLaserCount(playerId) {
+    return this.lasers.filter((laser) => laser.ownerId === playerId).length;
+  }
+
+  canPlayerFire(player, now) {
+    const state = player && player.state;
+    if (!state || state.playerState !== constants.PLAYER_STATES.ACTIVE) return false;
+    if (state.dead || state.finished || state.pendingForm) return false;
+    if (state.form !== "fire") return false;
+    if (now - (player.lastLaserFiredAt || 0) < constants.LASER_COOLDOWN_MS) return false;
+    if (this.activeLaserCount(player.id) >= constants.MAX_ACTIVE_LASERS_PER_PLAYER) return false;
+    return true;
+  }
+
+  handPosition(state, direction) {
+    const tall = state.h >= constants.PLAYER_SUPER_HEIGHT;
+    const x = direction > 0 ? state.x + state.w - 1 : state.x - constants.LASER_WIDTH + 1;
+    const y = state.y + (tall ? 13 : 7);
+    return { x, y };
+  }
+
+  handleFireInput(player, now) {
+    const input = player.input || {};
+    if (!input.fire) {
+      player.fireHeld = false;
+      return false;
+    }
+    if (player.fireHeld) return false;
+    player.fireHeld = true;
+    if (!this.canPlayerFire(player, now)) return false;
+    return this.spawnLaser(player, now);
+  }
+
+  spawnLaser(player, now) {
+    const state = player.state;
+    const direction = state.facing < 0 ? -1 : 1;
+    const hand = this.handPosition(state, direction);
+    const laser = {
+      id: `laser-${this.roundId}-${this.nextLaserId++}`,
+      roundId: this.roundId,
+      ownerId: player.id,
+      x: hand.x,
+      y: hand.y,
+      w: constants.LASER_WIDTH,
+      h: constants.LASER_HEIGHT,
+      vx: direction * constants.LASER_SPEED,
+      direction,
+      createdAt: now,
+      expiresAt: now + constants.LASER_LIFETIME_MS
+    };
+    this.lasers.push(laser);
+    player.lastLaserFiredAt = now;
+    state.shootingUntil = now + constants.SHOOT_ANIMATION_MS;
+    this.emitRoom("game:event", {
+      id: `${this.roundId}-${this.tick}-${player.id}-laser-fire`,
+      roundId: this.roundId,
+      playerId: player.id,
+      laserId: laser.id,
+      type: "laser:fire",
+      x: laser.x,
+      y: laser.y,
+      direction
+    });
+    return true;
+  }
+
+  stepLasers(dt, now) {
+    if (!this.lasers.length) return;
+    const survivors = [];
+    this.lasers.forEach((laser) => {
+      laser.x += laser.vx * dt;
+      if (this.shouldDestroyLaser(laser, now)) return;
+      const enemy = this.hitEnemy(laser);
+      if (enemy) {
+        this.destroyEnemyWithLaser(laser, enemy);
+        return;
+      }
+      if (this.hitsSolid(laser)) return;
+      survivors.push(laser);
+    });
+    this.lasers = survivors;
+  }
+
+  shouldDestroyLaser(laser, now) {
+    return now >= laser.expiresAt ||
+      laser.x + laser.w < 0 ||
+      laser.x > this.world.width ||
+      laser.y + laser.h < 0 ||
+      laser.y > this.world.height;
+  }
+
+  hitEnemy(laser) {
+    return this.world.enemies.find((enemy) => enemy.alive && physics.overlaps(laser, enemy));
+  }
+
+  hitsSolid(laser) {
+    return this.world.solids.some((solid) => physics.overlaps(laser, solid));
+  }
+
+  destroyEnemyWithLaser(laser, enemy) {
+    if (!enemy.alive) return;
+    enemy.alive = false;
+    const owner = this.room.players.get(laser.ownerId);
+    if (owner) this.score(owner, enemy.type === "koopa" ? "enemyAdvanced" : "enemyBasic");
+    this.emitRoom("game:event", {
+      id: `${this.roundId}-${this.tick}-${laser.id}-hit`,
+      roundId: this.roundId,
+      playerId: laser.ownerId,
+      laserId: laser.id,
+      enemyId: enemy.id,
+      type: "laser:hit"
+    });
+  }
+
+  clearPlayerLasers(playerId) {
+    this.lasers = this.lasers.filter((laser) => laser.ownerId !== playerId);
+  }
+
+  clearLasers() {
+    this.lasers = [];
+  }
+
   clearInput(player) {
     player.input = {
       sequence: player.input && player.input.sequence ? player.input.sequence : 0,
@@ -222,8 +350,10 @@ class GameSession {
       action: false,
       interact: false,
       highJump: false,
+      fire: false,
       clientTime: Date.now()
     };
+    player.fireHeld = false;
   }
 
   eliminatePlayer(player, reason) {
@@ -243,6 +373,7 @@ class GameSession {
     state.vy = -120;
     state.temporaryEffect = "none";
     state.effectExpiresAt = 0;
+    this.clearPlayerLasers(player.id);
     this.roundState = constants.ROUND_STATES.PLAYER_ELIMINATED;
     this.score(player, reason === "fall" ? "fall" : "death");
     const event = {
@@ -334,6 +465,7 @@ class GameSession {
     this.gameOverStartedAt = now;
     this.restartAt = now + constants.GAME_OVER_PRESENTATION_MS + constants.GAME_OVER_RESTART_MS;
     this.clearAllInputs();
+    this.clearLasers();
     const event = {
       id: `${this.roundId}-${this.tick}-game-over`,
       roundId: this.roundId,
@@ -379,6 +511,8 @@ class GameSession {
     this.remainingSeconds = constants.MATCH_SECONDS;
     this.lastSnapshotAt = 0;
     this.events = [];
+    this.clearLasers();
+    this.nextLaserId = 1;
     this.firstFinishAwarded = false;
     this.gameOverStarted = false;
     this.gameOverStartedAt = null;
@@ -449,7 +583,18 @@ class GameSession {
       })),
       coins: this.world.coins.filter((coin) => coin.collectedBy).map((coin) => ({ id: coin.id, collectedBy: coin.collectedBy })),
       powerUps: this.world.powerUps.filter((power) => power.collectedBy).map((power) => ({ id: power.id, collectedBy: power.collectedBy })),
-      enemies: this.world.enemies.map((enemy) => ({ id: enemy.id, x: enemy.x, y: enemy.y, alive: enemy.alive, type: enemy.type }))
+      enemies: this.world.enemies.map((enemy) => ({ id: enemy.id, x: enemy.x, y: enemy.y, alive: enemy.alive, type: enemy.type })),
+      lasers: this.lasers.map((laser) => ({
+        id: laser.id,
+        ownerId: laser.ownerId,
+        x: laser.x,
+        y: laser.y,
+        w: laser.w,
+        h: laser.h,
+        direction: laser.direction,
+        createdAt: laser.createdAt,
+        expiresAt: laser.expiresAt
+      }))
     };
   }
 }

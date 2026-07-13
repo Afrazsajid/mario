@@ -38,6 +38,7 @@
       deathReason: null,
       deathStartedAt: null,
       deathAnimationEndsAt: null,
+      shootingUntil: 0,
       form: "small",
       pendingForm: null,
       temporaryEffect: "none",

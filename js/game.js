@@ -144,7 +144,7 @@
       music[key].loop = key !== "clear";
       music[key].volume = muted ? 0 : musicVolume;
     });
-    ["coin", "stomp", "jump-small", "powerup", "flagpole", "pipe", "kick", "mariodie"].forEach(function (name) {
+    ["coin", "stomp", "jump-small", "powerup", "flagpole", "pipe", "kick", "mariodie", "fireball"].forEach(function (name) {
       sounds[name] = new Audio("sounds/" + name + (name.indexOf("jump") === 0 ? ".wav" : ".wav"));
       sounds[name].volume = muted ? 0 : effectsVolume;
     });
@@ -719,6 +719,7 @@
 
   function handleSnapshot(next) {
     var previousRoundId = snapshot && snapshot.roundId;
+    stampLocalShootingWindows(next);
     snapshot = next;
     if (next && next.roundId && previousRoundId && next.roundId !== previousRoundId) resetClientRound(next);
     else if (next && next.roundId && !lastRoundId) lastRoundId = next.roundId;
@@ -729,6 +730,15 @@
       input.reset();
     }
     updateRoundPresentation();
+  }
+
+  function stampLocalShootingWindows(next) {
+    if (!next || !next.players || !next.serverTime) return;
+    var now = Date.now();
+    next.players.forEach(function (player) {
+      if (!player.state || !player.state.shootingUntil) return;
+      player.state.shootingUntilLocal = now + Math.max(0, player.state.shootingUntil - next.serverTime);
+    });
   }
 
   function handleGameEvent(event) {
@@ -746,6 +756,15 @@
     }
     if (event.type === "round:gameOver" || event.type === "round:restarting") {
       updateRoundPresentation();
+      return;
+    }
+    if (event.type === "laser:fire") {
+      playSound("fireball");
+      return;
+    }
+    if (event.type === "laser:hit") {
+      playSound("stomp");
+      camera.shake = Math.max(camera.shake, 1.2);
       return;
     }
     if (event.type === "coin") playSound("coin");
@@ -942,8 +961,28 @@
       var h = current.type === "koopa" ? 32 : 16;
       if (enemyImg) ctx.drawImage(enemyImg, sx, sy, 16, h, worldX(current.x), worldY(current.y), 16, h);
     });
+    drawLasers();
     if (!snapshot || !snapshot.players) return;
     drawPlayersAndLabels();
+  }
+
+  function drawLasers() {
+    if (!snapshot || !snapshot.lasers) return;
+    snapshot.lasers.forEach(function (laser) {
+      var x = worldX(laser.x);
+      var y = worldY(laser.y);
+      var length = laser.w || constants.LASER_WIDTH || 12;
+      var height = laser.h || constants.LASER_HEIGHT || 3;
+      if (x + length < 0 || x > constants.LOGICAL_WIDTH || y + height < 0 || y > constants.LOGICAL_HEIGHT) return;
+      ctx.save();
+      ctx.fillStyle = "rgba(255, 216, 90, 0.55)";
+      ctx.fillRect(Math.round(x - 2), Math.round(y - 1), length + 4, height + 2);
+      ctx.fillStyle = "#fff7a8";
+      ctx.fillRect(Math.round(x), Math.round(y), length, height);
+      ctx.fillStyle = "#ff6b3d";
+      ctx.fillRect(Math.round(x), Math.round(y + 1), length, 1);
+      ctx.restore();
+    });
   }
 
   function drawPlayersAndLabels() {
@@ -1026,6 +1065,9 @@
   function init() {
     resizeCanvas();
     initAudio();
+    window.PQDCanCaptureGameplayInput = function () {
+      return appState === "game" && !paused;
+    };
     gameOverScreen = window.PQDGameOverScreen.create({ parent: document.getElementById("app"), constants: constants });
     spectatorBanner = createSpectatorBanner();
     setupNetwork();

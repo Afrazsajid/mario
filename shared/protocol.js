@@ -45,7 +45,7 @@
     "room:ready": "{ ready }",
     "room:character": "{ character }",
     "room:start": "{} host only, both players ready",
-    "game:input": "{ sequence, left, right, jump, run, action, interact, clientTime }",
+    "game:input": "{ sequence, left, right, jump, run, action, interact, fire, clientTime }",
     "game:restartVote": "{ wantsRestart }",
     "game:returnToLobby": "{}",
     "connection:ping": "{ clientTime }"

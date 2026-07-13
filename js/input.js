@@ -18,6 +18,7 @@
     KeyZ: "RUN",
     KeyF: "ACTION",
     KeyE: "INTERACT",
+    KeyV: "FIRE",
     ControlLeft: "CONTROL",
     ControlRight: "CONTROL",
     Escape: "PAUSE",
@@ -35,11 +36,16 @@
     return ["LEFT", "RIGHT", "UP", "DOWN", "JUMP", "RUN"].indexOf(key) !== -1;
   }
 
+  function shouldBlockDefault(key) {
+    if (shouldBlockScroll(key)) return true;
+    return key === "FIRE" && typeof window.PQDCanCaptureGameplayInput === "function" && window.PQDCanCaptureGameplayInput();
+  }
+
   function setKey(event, status) {
     var key = keyFor(event);
     if (!key) return;
     pressedKeys[key] = status;
-    if (status && shouldBlockScroll(key)) event.preventDefault();
+    if (status && shouldBlockDefault(key)) event.preventDefault();
     if (status && key === "FULLSCREEN") {
       window.dispatchEvent(new CustomEvent("pqd:fullscreen-shortcut"));
     }
@@ -68,6 +74,7 @@
         run: !!pressedKeys.RUN,
         action: !!pressedKeys.ACTION,
         interact: !!pressedKeys.INTERACT,
+        fire: !!pressedKeys.FIRE,
         highJump: !!pressedKeys.JUMP && !!pressedKeys.CONTROL
       };
     },
