@@ -16,11 +16,13 @@ class GameSession {
     this.currentCheckpointSpawn = null;
     this.tick = 0;
     this.startedAt = Date.now();
-    this.remainingSeconds = constants.MATCH_SECONDS;
+    this.remainingSeconds = this.matchDurationSeconds();
     this.lastSnapshotAt = 0;
     this.events = [];
     this.lasers = [];
+    this.enemyProjectiles = this.world.enemyProjectiles || [];
     this.nextLaserId = 1;
+    this.nextEnemyProjectileId = 1;
     this.firstFinishAwarded = false;
     this.gameOverStarted = false;
     this.gameOverStartedAt = null;
@@ -39,6 +41,7 @@ class GameSession {
         ? { x: this.currentCheckpointSpawn.x + index * 18, y: this.currentCheckpointSpawn.y }
         : this.world.spawnPoints[index];
       player.state = physics.createPlayerState(spawn, index);
+      this.applySpawnProtection(player.state);
       player.input = { sequence: 0 };
       player.lastLaserFiredAt = 0;
       player.fireHeld = false;
@@ -46,6 +49,22 @@ class GameSession {
       player.restartVote = false;
       index += 1;
     });
+  }
+
+  matchDurationSeconds() {
+    return Math.max(0, constants.MATCH_SECONDS || 0);
+  }
+
+  matchHasTimer() {
+    return this.matchDurationSeconds() > 0;
+  }
+
+  applySpawnProtection(state) {
+    if (!state || !constants.SPAWN_INVULNERABILITY_MS) return;
+    const expiresAt = Date.now() + constants.SPAWN_INVULNERABILITY_MS;
+    state.invulnerableUntil = expiresAt;
+    state.temporaryEffect = "damageInvulnerability";
+    state.effectExpiresAt = expiresAt;
   }
 
   setInput(playerId, input) {
@@ -84,11 +103,18 @@ class GameSession {
       return;
     }
     if (this.roundState !== constants.ROUND_STATES.PLAYING && this.roundState !== constants.ROUND_STATES.PLAYER_ELIMINATED) return;
-    this.remainingSeconds = Math.max(0, constants.MATCH_SECONDS - Math.floor((now - this.startedAt) / 1000));
+    this.remainingSeconds = this.matchHasTimer()
+      ? Math.max(0, this.matchDurationSeconds() - Math.floor((now - this.startedAt) / 1000))
+      : 0;
 
     this.stepMovingPlatforms(dt);
-    this.world.enemies.forEach((enemy) => physics.stepEnemy(enemy, dt, this.world));
+    this.world.enemies.forEach((enemy) => physics.stepEnemy(enemy, dt, this.world, {
+      players: this.activePlayers(),
+      spawnEnemyProjectile: (source) => this.spawnEnemyProjectile(source, now)
+    }));
+    this.checkShellEnemyCollisions();
     this.stepLasers(dt, now);
+    this.stepEnemyProjectiles(dt, now);
     this.room.players.forEach((player) => {
       if (!player.connected) return;
       this.updatePowerTimers(player);
@@ -121,7 +147,7 @@ class GameSession {
       this.checkEnemyCollisions(player);
     });
 
-    if (this.remainingSeconds <= 0) this.handleTimerExpired();
+    if (this.matchHasTimer() && this.remainingSeconds <= 0) this.handleTimerExpired();
     this.checkRoundEnd();
   }
 
@@ -268,15 +294,84 @@ class GameSession {
     if (!box || box.playerState !== constants.PLAYER_STATES.ACTIVE) return;
     this.world.enemies.forEach((enemy) => {
       if (!enemy.alive || !physics.overlaps(box, enemy)) return;
+      if (enemy.behaviour === "pipePlant" && enemy.state === "hidden") return;
       const stomp = box.vy > 0 && box.y + box.h - enemy.y <= 12;
       if (stomp || box.temporaryEffect === "star") {
-        enemy.alive = false;
+        if (enemy.type === "koopa" && enemy.state !== "shellStationary" && enemy.state !== "shellMoving" && box.temporaryEffect !== "star") {
+          this.enterKoopaShell(enemy);
+          box.vy = -170;
+          this.score(player, "enemyAdvanced");
+          return;
+        }
+        if (enemy.type === "spiny" && box.temporaryEffect !== "star") {
+          if (Date.now() > box.invulnerableUntil) {
+            const eliminated = this.damagePlayer(player);
+            if (!eliminated) this.score(player, "damage");
+          }
+          return;
+        }
+        if (enemy.state === "shellStationary" && box.temporaryEffect !== "star") {
+          this.kickShell(enemy, box.x + box.w / 2 < enemy.x + enemy.w / 2 ? 1 : -1);
+          box.vy = -150;
+          return;
+        }
+        if (enemy.state === "shellMoving" && box.temporaryEffect !== "star") {
+          enemy.state = "shellStationary";
+          enemy.vx = 0;
+          box.vy = -170;
+          return;
+        }
+        this.defeatEnemy(enemy);
         box.vy = -170;
-        this.score(player, enemy.type === "koopa" ? "enemyAdvanced" : "enemyBasic");
+        this.score(player, this.scoreEventForEnemy(enemy));
+      } else if (enemy.state === "shellStationary") {
+        this.kickShell(enemy, box.x + box.w / 2 < enemy.x + enemy.w / 2 ? 1 : -1);
       } else if (Date.now() > box.invulnerableUntil) {
         const eliminated = this.damagePlayer(player);
         if (!eliminated) this.score(player, "damage");
       }
+    });
+  }
+
+  enterKoopaShell(enemy) {
+    const feetY = enemy.y + enemy.h;
+    enemy.state = "shellStationary";
+    enemy.spriteFamily = "koopa";
+    enemy.h = 14;
+    enemy.w = 14;
+    enemy.y = feetY - enemy.h;
+    enemy.vx = 0;
+    enemy.vy = 0;
+  }
+
+  kickShell(enemy, direction) {
+    enemy.state = "shellMoving";
+    enemy.vx = direction * 150;
+    enemy.direction = direction;
+    this.emitRoom("game:event", {
+      id: `${this.roundId}-${this.tick}-${enemy.id}-shell-kick`,
+      roundId: this.roundId,
+      enemyId: enemy.id,
+      type: "enemy:shellKick"
+    });
+  }
+
+  checkShellEnemyCollisions() {
+    const shells = this.world.enemies.filter((enemy) => enemy.alive && enemy.state === "shellMoving");
+    if (!shells.length) return;
+    shells.forEach((shell) => {
+      this.world.enemies.forEach((enemy) => {
+        if (!enemy.alive || enemy === shell || enemy.state === "shellMoving" || !physics.overlaps(shell, enemy)) return;
+        this.defeatEnemy(enemy);
+        const owner = this.activePlayers().find((player) => Math.abs(player.state.x - shell.x) < 260);
+        if (owner) this.score(owner, this.scoreEventForEnemy(enemy));
+        this.emitRoom("game:event", {
+          id: `${this.roundId}-${this.tick}-${shell.id}-${enemy.id}-shell-hit`,
+          roundId: this.roundId,
+          enemyId: enemy.id,
+          type: "enemy:shellHit"
+        });
+      });
     });
   }
 
@@ -381,9 +476,9 @@ class GameSession {
 
   destroyEnemyWithLaser(laser, enemy) {
     if (!enemy.alive) return;
-    enemy.alive = false;
+    this.defeatEnemy(enemy);
     const owner = this.room.players.get(laser.ownerId);
-    if (owner) this.score(owner, enemy.type === "koopa" ? "enemyAdvanced" : "enemyBasic");
+    if (owner) this.score(owner, this.scoreEventForEnemy(enemy));
     this.emitRoom("game:event", {
       id: `${this.roundId}-${this.tick}-${laser.id}-hit`,
       roundId: this.roundId,
@@ -394,12 +489,84 @@ class GameSession {
     });
   }
 
+  scoreEventForEnemy(enemy) {
+    return enemy.type === "goomba" || enemy.type === "fastWalker" ? "enemyBasic" : "enemyAdvanced";
+  }
+
+  defeatEnemy(enemy) {
+    enemy.alive = false;
+    enemy.state = "defeated";
+    enemy.vx = 0;
+    enemy.vy = 0;
+  }
+
+  spawnEnemyProjectile(source, now = Date.now()) {
+    if (!source.alive || source.state !== "telegraph") return false;
+    if (this.enemyProjectiles.length >= constants.MAX_ACTIVE_ENEMY_PROJECTILES) return false;
+    const direction = source.direction < 0 ? -1 : 1;
+    this.enemyProjectiles.push({
+      id: `enemy-shot-${this.roundId}-${this.nextEnemyProjectileId++}`,
+      sourceId: source.id,
+      type: "ranged",
+      x: direction < 0 ? source.x - 8 : source.x + source.w,
+      y: source.y + 8,
+      w: 10,
+      h: 8,
+      vx: direction * constants.ENEMY_PROJECTILE_SPEED,
+      vy: 0,
+      direction,
+      createdAt: now,
+      expiresAt: now + constants.ENEMY_PROJECTILE_LIFETIME_MS
+    });
+    this.world.enemyProjectiles = this.enemyProjectiles;
+    this.emitRoom("game:event", {
+      id: `${this.roundId}-${this.tick}-${source.id}-enemy-fire`,
+      roundId: this.roundId,
+      enemyId: source.id,
+      type: "enemy:fire",
+      x: source.x,
+      y: source.y
+    });
+    return true;
+  }
+
+  stepEnemyProjectiles(dt, now) {
+    if (!this.enemyProjectiles.length) return;
+    const survivors = [];
+    this.enemyProjectiles.forEach((projectile) => {
+      projectile.x += projectile.vx * dt;
+      projectile.y += projectile.vy * dt;
+      if (now >= projectile.expiresAt ||
+        projectile.x + projectile.w < 0 ||
+        projectile.x > this.world.width ||
+        projectile.y + projectile.h < 0 ||
+        projectile.y > this.world.height) return;
+      if (this.world.solids.some((solid) => physics.overlaps(projectile, solid))) return;
+      const hitPlayer = this.activePlayers().find((player) => physics.overlaps(player.state, projectile));
+      if (hitPlayer) {
+        if (Date.now() > hitPlayer.state.invulnerableUntil) {
+          const eliminated = this.damagePlayer(hitPlayer);
+          if (!eliminated) this.score(hitPlayer, "damage");
+        }
+        return;
+      }
+      survivors.push(projectile);
+    });
+    this.enemyProjectiles = survivors;
+    this.world.enemyProjectiles = survivors;
+  }
+
   clearPlayerLasers(playerId) {
     this.lasers = this.lasers.filter((laser) => laser.ownerId !== playerId);
   }
 
   clearLasers() {
     this.lasers = [];
+  }
+
+  clearEnemyProjectiles() {
+    this.enemyProjectiles = [];
+    if (this.world) this.world.enemyProjectiles = this.enemyProjectiles;
   }
 
   clearInput(player) {
@@ -516,6 +683,7 @@ class GameSession {
   }
 
   handleTimerExpired() {
+    if (!this.matchHasTimer()) return;
     this.activePlayers().forEach((player) => this.eliminatePlayer(player, "timer"));
   }
 
@@ -528,6 +696,7 @@ class GameSession {
     this.restartAt = now + constants.GAME_OVER_PRESENTATION_MS + constants.GAME_OVER_RESTART_MS;
     this.clearAllInputs();
     this.clearLasers();
+    this.clearEnemyProjectiles();
     const event = {
       id: `${this.roundId}-${this.tick}-game-over`,
       roundId: this.roundId,
@@ -577,11 +746,13 @@ class GameSession {
     }
     this.tick = 0;
     this.startedAt = Date.now() + constants.ROUND_RESTART_COUNTDOWN_MS;
-    this.remainingSeconds = constants.MATCH_SECONDS;
+    this.remainingSeconds = this.matchDurationSeconds();
     this.lastSnapshotAt = 0;
     this.events = [];
     this.clearLasers();
+    this.enemyProjectiles = this.world.enemyProjectiles || [];
     this.nextLaserId = 1;
+    this.nextEnemyProjectileId = 1;
     this.firstFinishAwarded = false;
     this.gameOverStarted = false;
     this.gameOverStartedAt = null;
@@ -597,7 +768,7 @@ class GameSession {
     if (this.roundState !== constants.ROUND_STATES.COUNTDOWN || now < this.roundStartsAt) return;
     this.roundState = constants.ROUND_STATES.PLAYING;
     this.startedAt = now;
-    this.remainingSeconds = constants.MATCH_SECONDS;
+    this.remainingSeconds = this.matchDurationSeconds();
     this.clearAllInputs();
     this.emitRoom("round:start", this.snapshot());
     this.emitRoom("game:start", this.snapshot());
@@ -642,6 +813,7 @@ class GameSession {
         title: this.world.title,
         width: this.world.width,
         finishX: this.world.finishX,
+        endless: !!this.world.endless,
         theme: this.world.theme,
         sections: this.world.sections
       },
@@ -660,7 +832,20 @@ class GameSession {
       })),
       coins: this.world.coins.filter((coin) => coin.collectedBy).map((coin) => ({ id: coin.id, collectedBy: coin.collectedBy })),
       powerUps: this.world.powerUps.filter((power) => power.collectedBy).map((power) => ({ id: power.id, collectedBy: power.collectedBy })),
-      enemies: this.world.enemies.map((enemy) => ({ id: enemy.id, x: enemy.x, y: enemy.y, alive: enemy.alive, type: enemy.type })),
+      enemies: this.world.enemies.map((enemy) => ({
+        id: enemy.id,
+        x: enemy.x,
+        y: enemy.y,
+        w: enemy.w,
+        h: enemy.h,
+        vx: enemy.vx,
+        alive: enemy.alive,
+        type: enemy.type,
+        spriteFamily: enemy.spriteFamily,
+        behaviour: enemy.behaviour,
+        state: enemy.state,
+        direction: enemy.direction
+      })),
       checkpoints: this.world.checkpoints.map((checkpoint) => ({
         id: checkpoint.id,
         x: checkpoint.x,
@@ -687,6 +872,17 @@ class GameSession {
         direction: laser.direction,
         createdAt: laser.createdAt,
         expiresAt: laser.expiresAt
+      })),
+      enemyProjectiles: this.enemyProjectiles.map((projectile) => ({
+        id: projectile.id,
+        sourceId: projectile.sourceId,
+        type: projectile.type,
+        x: projectile.x,
+        y: projectile.y,
+        w: projectile.w,
+        h: projectile.h,
+        direction: projectile.direction,
+        expiresAt: projectile.expiresAt
       }))
     };
   }

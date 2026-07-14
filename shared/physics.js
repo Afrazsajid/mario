@@ -1,7 +1,7 @@
 (function (root, factory) {
-  if (typeof module === "object" && module.exports) module.exports = factory(require("./constants"));
-  else root.PQDPhysics = factory(root.PQDConstants);
-})(typeof globalThis !== "undefined" ? globalThis : this, function (constants) {
+  if (typeof module === "object" && module.exports) module.exports = factory(require("./constants"), require("./enemyRegistry"));
+  else root.PQDPhysics = factory(root.PQDConstants, root.PQDEnemyRegistry);
+})(typeof globalThis !== "undefined" ? globalThis : this, function (constants, enemyRegistry) {
   "use strict";
 
   var GRAVITY = 900;
@@ -147,10 +147,34 @@
     return state;
   }
 
-  function stepEnemy(enemy, dt, world) {
-    if (!enemy.alive) return enemy;
-    enemy.vy += GRAVITY * dt;
-    enemy.vy = Math.min(380, enemy.vy);
+  function activePlayersFromContext(context) {
+    if (!context || !context.players) return [];
+    return context.players.filter(function (player) {
+      return player && player.state && player.state.playerState === "active";
+    });
+  }
+
+  function nearestPlayer(enemy, players, maxDistance) {
+    var best = null;
+    var bestDistance = maxDistance || Infinity;
+    players.forEach(function (player) {
+      var state = player.state;
+      var dx = state.x + state.w / 2 - (enemy.x + enemy.w / 2);
+      var dy = state.y + state.h / 2 - (enemy.y + enemy.h / 2);
+      var distance = Math.sqrt(dx * dx + dy * dy);
+      if (distance < bestDistance) {
+        best = state;
+        bestDistance = distance;
+      }
+    });
+    return best;
+  }
+
+  function stepWalkerEnemy(enemy, dt, world, gravityEnabled) {
+    if (gravityEnabled !== false) {
+      enemy.vy += GRAVITY * dt;
+      enemy.vy = Math.min(380, enemy.vy);
+    }
     enemy.x += enemy.vx * dt;
     var box = { x: enemy.x, y: enemy.y, w: enemy.w, h: enemy.h };
     var solids = nearbySolids(box, world.solids);
@@ -158,22 +182,136 @@
       if (overlaps(box, solids[i])) {
         enemy.x = enemy.vx > 0 ? solids[i].x - enemy.w : solids[i].x + solids[i].w;
         enemy.vx = -enemy.vx;
+        enemy.direction = enemy.vx < 0 ? -1 : 1;
         box.x = enemy.x;
       }
     }
-    enemy.y += enemy.vy * dt;
-    box.y = enemy.y;
-    solids = nearbySolids(box, world.solids);
-    for (i = 0; i < solids.length; i++) {
-      if (overlaps(box, solids[i])) {
-        if (enemy.vy > 0) enemy.y = solids[i].y - enemy.h;
-        else enemy.y = solids[i].y + solids[i].h;
-        enemy.vy = 0;
-        box.y = enemy.y;
+    if (enemy.patrolMinX !== undefined && enemy.x < enemy.patrolMinX) {
+      enemy.x = enemy.patrolMinX;
+      enemy.vx = Math.abs(enemy.vx);
+      enemy.direction = 1;
+    } else if (enemy.patrolMaxX !== undefined && enemy.x > enemy.patrolMaxX) {
+      enemy.x = enemy.patrolMaxX;
+      enemy.vx = -Math.abs(enemy.vx);
+      enemy.direction = -1;
+    }
+    if (gravityEnabled !== false) {
+      enemy.y += enemy.vy * dt;
+      box.y = enemy.y;
+      solids = nearbySolids(box, world.solids);
+      for (i = 0; i < solids.length; i++) {
+        if (overlaps(box, solids[i])) {
+          if (enemy.vy > 0) enemy.y = solids[i].y - enemy.h;
+          else enemy.y = solids[i].y + solids[i].h;
+          enemy.vy = 0;
+          box.y = enemy.y;
+        }
       }
     }
     if (enemy.y > world.height + 80) enemy.alive = false;
     return enemy;
+  }
+
+  function stepPlant(enemy, dt, players) {
+    enemy.vx = 0;
+    enemy.vy = 0;
+    enemy.stateTime = (enemy.stateTime || 0) + dt;
+    var close = players.some(function (player) {
+      var state = player.state;
+      return Math.abs((state.x + state.w / 2) - (enemy.x + enemy.w / 2)) < 44 &&
+        state.y + state.h > enemy.pipeTopY - 8;
+    });
+    if (enemy.state === "hidden") {
+      enemy.y = enemy.hiddenY;
+      if (!close && enemy.stateTime + (enemy.cycleOffset || 0) >= 1.1) {
+        enemy.state = "emerging";
+        enemy.stateTime = 0;
+      }
+    } else if (enemy.state === "emerging") {
+      enemy.y = Math.max(enemy.exposedY, enemy.y - 28 * dt);
+      if (enemy.y <= enemy.exposedY) {
+        enemy.y = enemy.exposedY;
+        enemy.state = "exposed";
+        enemy.stateTime = 0;
+      }
+    } else if (enemy.state === "exposed") {
+      enemy.y = enemy.exposedY;
+      if (enemy.stateTime >= 1.2 || close) {
+        enemy.state = "retracting";
+        enemy.stateTime = 0;
+      }
+    } else if (enemy.state === "retracting") {
+      enemy.y = Math.min(enemy.hiddenY, enemy.y + 32 * dt);
+      if (enemy.y >= enemy.hiddenY) {
+        enemy.y = enemy.hiddenY;
+        enemy.state = "hidden";
+        enemy.stateTime = 0;
+      }
+    }
+    return enemy;
+  }
+
+  function stepFlying(enemy, dt) {
+    enemy.phase = (enemy.phase || 0) + dt * 3;
+    enemy.x += enemy.vx * dt;
+    if (enemy.x <= enemy.patrolMinX) {
+      enemy.x = enemy.patrolMinX;
+      enemy.vx = Math.abs(enemy.vx);
+      enemy.direction = 1;
+    } else if (enemy.x >= enemy.patrolMaxX) {
+      enemy.x = enemy.patrolMaxX;
+      enemy.vx = -Math.abs(enemy.vx);
+      enemy.direction = -1;
+    }
+    enemy.y = enemy.baseY + Math.sin(enemy.phase) * 10;
+    return enemy;
+  }
+
+  function stepRanged(enemy, dt, players, context) {
+    enemy.vx = 0;
+    enemy.vy += GRAVITY * dt;
+    enemy.vy = Math.min(380, enemy.vy);
+    stepWalkerEnemy(enemy, dt, { solids: context.worldSolids || [], height: Infinity }, true);
+    enemy.cooldown = Math.max(0, (enemy.cooldown || 0) - dt);
+    enemy.stateTime = (enemy.stateTime || 0) + dt;
+    var target = nearestPlayer(enemy, players, 220);
+    if (!target) {
+      enemy.state = "idle";
+      return enemy;
+    }
+    enemy.direction = target.x < enemy.x ? -1 : 1;
+    if (enemy.cooldown > 0) {
+      enemy.state = "cooldown";
+      return enemy;
+    }
+    if (enemy.state !== "telegraph") {
+      enemy.state = "telegraph";
+      enemy.stateTime = 0;
+      return enemy;
+    }
+    if (enemy.stateTime >= 0.55 && context && context.spawnEnemyProjectile) {
+      context.spawnEnemyProjectile(enemy);
+      enemy.cooldown = 2.2;
+      enemy.state = "cooldown";
+      enemy.stateTime = 0;
+    }
+    return enemy;
+  }
+
+  function stepEnemy(enemy, dt, world, context) {
+    if (!enemy.alive) return enemy;
+    context = context || {};
+    context.worldSolids = world.solids;
+    var players = activePlayersFromContext(context);
+    if (enemy.behaviour === "pipePlant") return stepPlant(enemy, dt, players);
+    if (enemy.behaviour === "aerialPatrol") return stepFlying(enemy, dt);
+    if (enemy.behaviour === "projectileThrower") return stepRanged(enemy, dt, players, context);
+    if (enemy.behaviour === "shellWalker" && enemy.state === "shellStationary") {
+      enemy.vx = 0;
+      enemy.vy += GRAVITY * dt;
+      return stepWalkerEnemy(enemy, dt, world, true);
+    }
+    return stepWalkerEnemy(enemy, dt, world, true);
   }
 
   return Object.freeze({

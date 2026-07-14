@@ -86,16 +86,17 @@ test("automatic restart resets the mutable round state", () => {
   assert.equal(game.roundState, constants.ROUND_STATES.PLAYING);
 });
 
-test("a survivor can finish the level after the other player is spectating", () => {
+test("a survivor keeps playing endlessly after the other player is spectating", () => {
   const { emitted, room, game, host, guest } = createSession();
   game.eliminatePlayer(host, "fall");
   finishDeathAnimation(host);
   game.update(1 / constants.SERVER_TICK_RATE);
 
-  guest.state.x = game.world.finishX;
+  guest.state.x = 434 * constants.TILE_SIZE;
   game.update(0);
 
-  assert.equal(room.status, constants.ROOM_STATUS.RESULTS);
+  assert.equal(room.status, constants.ROOM_STATUS.PLAYING);
   assert.notEqual(game.roundState, constants.ROUND_STATES.GAME_OVER);
-  assert.equal(emitted.some((item) => item.event === "game:over"), true);
+  assert.equal(emitted.some((item) => item.event === "game:over"), false);
+  assert.equal(guest.state.playerState, constants.PLAYER_STATES.ACTIVE);
 });

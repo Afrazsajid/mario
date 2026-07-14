@@ -121,10 +121,16 @@
     srStatus.textContent = message;
   }
 
-  function toast(message) {
-    var node = el("div", "toast", message);
+  function toast(message, tone) {
+    var node = el("div", "toast" + (tone ? " toast-" + tone : ""), message);
     toastRegion.appendChild(node);
-    setTimeout(function () { node.remove(); }, 4200);
+    while (toastRegion.children.length > 3) {
+      toastRegion.removeChild(toastRegion.firstChild);
+    }
+    setTimeout(function () {
+      node.classList.add("toast-exit");
+      setTimeout(function () { node.remove(); }, 260);
+    }, 2600);
     announce(message);
   }
 
@@ -746,12 +752,12 @@
     var player = snapshot && snapshot.players ? snapshot.players.find(function (p) { return p.id === event.playerId; }) : null;
     if (event.type === "player:dying") {
       playSound("mariodie");
-      toast((player ? player.name : "Player") + " is out.");
+      toast((player ? player.name : "Player") + " " + deathReasonText(event.reason), "warning");
       return;
     }
     if (event.type === "player:spectating") return;
     if (event.type === "round:lastPlayer") {
-      toast((player ? player.name : "Player") + " is the last runner.");
+      toast((player ? player.name : "Player") + " is the last runner.", "warning");
       return;
     }
     if (event.type === "round:gameOver" || event.type === "round:restarting") {
@@ -761,7 +767,7 @@
     if (event.type === "checkpoint:activated") {
       playSound("powerup");
       camera.shake = Math.max(camera.shake, 1);
-      toast((player ? player.name : "Player") + " reached a checkpoint.");
+      toast((player ? player.name : "Player") + " reached a checkpoint.", "score");
       return;
     }
     if (event.type === "laser:fire") {
@@ -773,11 +779,24 @@
       camera.shake = Math.max(camera.shake, 1.2);
       return;
     }
+    if (event.type === "enemy:shellHit") {
+      playSound("stomp");
+      camera.shake = Math.max(camera.shake, 1.4);
+      toast("Shell chain!", "score");
+      return;
+    }
     if (event.type === "coin") playSound("coin");
     if (event.type.indexOf("enemy") === 0) playSound("stomp");
     if (typeof event.delta !== "number") return;
     if (event.delta > 0) camera.shake = Math.max(camera.shake, 1.4);
-    toast((player ? player.name : "Player") + " +" + event.delta);
+    toast((player ? player.name : "Player") + " +" + event.delta, event.delta > 0 ? "score" : "warning");
+  }
+
+  function deathReasonText(reason) {
+    if (reason === "fall") return "fell.";
+    if (reason === "enemy") return "was hit.";
+    if (reason === "timer") return "ran out of time.";
+    return "is out.";
   }
 
   function sendInput(now) {
@@ -800,11 +819,14 @@
     renderHudCard(hudP1, p1, p1 && p2 && p1.stats.score >= p2.stats.score);
     renderHudCard(hudP2, p2, p2 && p1 && p2.stats.score > p1.stats.score);
     var seconds = snapshot.remainingSeconds || 0;
-    matchTimer.textContent = Math.floor(seconds / 60) + ":" + String(seconds % 60).padStart(2, "0");
+    matchTimer.textContent = seconds > 0 ? Math.floor(seconds / 60) + ":" + String(seconds % 60).padStart(2, "0") : "ENDLESS";
     levelTitle.textContent = snapshot.level ? snapshot.level.title : world.title;
     var maxProgress = 0;
     snapshot.players.forEach(function (player) {
-      if (player.state) maxProgress = Math.max(maxProgress, Math.min(100, (player.state.x / world.finishX) * 100));
+      if (player.state) {
+        var targetDistance = snapshot.level && snapshot.level.endless ? 5000 : world.finishX;
+        maxProgress = Math.max(maxProgress, Math.min(100, (player.state.x / targetDistance) * 100));
+      }
     });
     teamProgress.style.width = maxProgress + "%";
     roomHud.textContent = "Room " + (room ? room.roomCode : roomCode || "------");
@@ -818,7 +840,10 @@
       return;
     }
     target.classList.toggle("leader", !!leader);
-    target.appendChild(el("strong", "", player.name + (leader ? " crown" : "")));
+    var title = el("strong", "hud-player-name");
+    title.appendChild(document.createTextNode(player.name));
+    if (leader) title.appendChild(el("span", "leader-mark", "CROWN"));
+    target.appendChild(title);
     target.appendChild(el("span", "badge", player.state && player.state.playerState ? player.state.playerState : "active"));
     [
       ["Score", player.stats.score],
@@ -987,17 +1012,49 @@
       if (items) ctx.drawImage(items, 0, sy, 16, 16, worldX(power.x), worldY(power.y), 16, 16);
     });
     var enemyImg = resources.get("sprites/enemy.png");
+    var enemyImgR = resources.get("sprites/enemyr.png");
     world.enemies.forEach(function (enemy) {
       var current = enemyUpdates[enemy.id] || enemy;
       if (!current.alive) return;
-      var sx = current.type === "koopa" ? 96 : 0;
-      var sy = current.type === "koopa" ? 0 : 16;
-      var h = current.type === "koopa" ? 32 : 16;
-      if (enemyImg) ctx.drawImage(enemyImg, sx, sy, 16, h, worldX(current.x), worldY(current.y), 16, h);
+      drawEnemySprite(enemyImg, enemyImgR, current);
     });
+    drawEnemyProjectiles(enemyImg);
     drawLasers();
     if (!snapshot || !snapshot.players) return;
     drawPlayersAndLabels();
+  }
+
+  function drawEnemySprite(enemyImg, enemyImgR, enemy) {
+    if (!window.PQDEnemyRegistry || !enemyImg) return;
+    var frameSet = window.PQDEnemyRegistry.frameForType(enemy.type);
+    var frames;
+    var sourceImage = enemy.direction > 0 ? enemyImgR || enemyImg : enemyImg;
+    if (enemy.type === "koopa" && (enemy.state === "shellStationary" || enemy.state === "shellMoving")) {
+      frames = frameSet.shell || frameSet.enemy;
+      sourceImage = enemyImg;
+    } else {
+      frames = enemy.direction > 0 && frameSet.enemyr ? frameSet.enemyr : frameSet.enemy;
+    }
+    var frame = frames[Math.floor(performance.now() / 180) % frames.length] || frames[0];
+    var drawW = frameSet.drawWidth || frame.sw;
+    var drawH = enemy.type === "koopa" && (enemy.state === "shellStationary" || enemy.state === "shellMoving") ? 16 : frameSet.drawHeight || frame.sh;
+    var drawX = currentDrawX(enemy, drawW);
+    var drawY = enemy.y + enemy.h - drawH;
+    if (drawX + drawW < camera.x || drawX > camera.x + constants.LOGICAL_WIDTH) return;
+    ctx.drawImage(sourceImage, frame.sx, frame.sy, frame.sw, frame.sh, worldX(drawX), worldY(drawY), drawW, drawH);
+  }
+
+  function currentDrawX(entity, drawW) {
+    return entity.x + entity.w / 2 - drawW / 2;
+  }
+
+  function drawEnemyProjectiles(enemyImg) {
+    if (!enemyImg || !snapshot || !snapshot.enemyProjectiles || !window.PQDEnemyRegistry) return;
+    var projectileFrame = window.PQDEnemyRegistry.ENEMY_FRAMES.ranged.projectile;
+    snapshot.enemyProjectiles.forEach(function (projectile) {
+      if (projectile.x + projectile.w < camera.x || projectile.x > camera.x + constants.LOGICAL_WIDTH) return;
+      ctx.drawImage(enemyImg, projectileFrame.sx, projectileFrame.sy, projectileFrame.sw, projectileFrame.sh, worldX(projectile.x - 3), worldY(projectile.y - 4), 16, 16);
+    });
   }
 
   function drawLasers() {

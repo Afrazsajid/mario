@@ -17,15 +17,18 @@ function createSession() {
   return { room, game: room.game, mario: created.player, luigi: joined.player };
 }
 
-test("extended level validates and exposes six progressive sections", () => {
+test("endless level validates and exposes authored challenge families", () => {
   const world = levelData.createWorld();
   const report = levelData.validateLevel(world);
   assert.equal(report.ok, true, report.issues.join("\n"));
-  assert.deepEqual(report.sections, ["intro", "movement", "enemy", "vertical", "advanced", "final"]);
+  assert.deepEqual(report.sections.slice(0, 6), ["intro", "movement", "enemy", "vertical", "advanced", "final"]);
+  assert.equal(world.endless, true);
   assert.equal(world.width, constants.LEVEL_WIDTH);
-  assert.equal(world.finishX, 434 * constants.TILE_SIZE);
-  assert.equal(world.checkpoints.length, 4);
-  assert.equal(world.movingPlatforms.length, 4);
+  assert.ok(world.finishX > world.width);
+  assert.ok(world.sections.length > 80);
+  assert.ok(world.checkpoints.length > 12);
+  assert.ok(world.movingPlatforms.length > 4);
+  assert.deepEqual(new Set(world.sections.slice(6).map((section) => section.family)), new Set(levelData.ENDLESS_FAMILIES));
 });
 
 test("old blocked wall area is a climbable designed route", () => {
