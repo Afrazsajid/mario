@@ -1016,6 +1016,7 @@
     world.enemies.forEach(function (enemy) {
       var current = enemyUpdates[enemy.id] || enemy;
       if (!current.alive) return;
+      if (current.type === "plant" && current.state === "hidden") return;
       drawEnemySprite(enemyImg, enemyImgR, current);
     });
     drawEnemyProjectiles(enemyImg);
@@ -1035,7 +1036,10 @@
     } else {
       frames = enemy.direction > 0 && frameSet.enemyr ? frameSet.enemyr : frameSet.enemy;
     }
-    var frame = frames[Math.floor(performance.now() / 180) % frames.length] || frames[0];
+    var frameIndex = enemy.type === "plant" && typeof enemy.animationFrame === "number"
+      ? enemy.animationFrame
+      : Math.floor(performance.now() / 180);
+    var frame = frames[Math.abs(frameIndex) % frames.length] || frames[0];
     var drawW = frameSet.drawWidth || frame.sw;
     var drawH = enemy.type === "koopa" && (enemy.state === "shellStationary" || enemy.state === "shellMoving") ? 16 : frameSet.drawHeight || frame.sh;
     var drawX = currentDrawX(enemy, drawW);

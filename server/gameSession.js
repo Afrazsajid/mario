@@ -844,6 +844,9 @@ class GameSession {
         spriteFamily: enemy.spriteFamily,
         behaviour: enemy.behaviour,
         state: enemy.state,
+        stateTime: enemy.stateTime,
+        animationFrame: enemy.animationFrame,
+        pipeTopY: enemy.pipeTopY,
         direction: enemy.direction
       })),
       checkpoints: this.world.checkpoints.map((checkpoint) => ({

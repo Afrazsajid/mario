@@ -216,32 +216,40 @@
     enemy.vx = 0;
     enemy.vy = 0;
     enemy.stateTime = (enemy.stateTime || 0) + dt;
+    var cycleSpeed = Math.max(1, Math.min(1.32, enemy.cycleSpeed || 1));
     var close = players.some(function (player) {
       var state = player.state;
       return Math.abs((state.x + state.w / 2) - (enemy.x + enemy.w / 2)) < 44 &&
         state.y + state.h > enemy.pipeTopY - 8;
     });
+    if (enemy.state !== "hidden") {
+      enemy.animationFrame = Math.floor((enemy.stateTime + (enemy.cycleOffset || 0)) * 7) % 2;
+    } else {
+      enemy.animationFrame = 0;
+    }
     if (enemy.state === "hidden") {
       enemy.y = enemy.hiddenY;
-      if (!close && enemy.stateTime + (enemy.cycleOffset || 0) >= 1.1) {
-        enemy.state = "emerging";
+      if (close) {
+        enemy.stateTime = 0;
+      } else if (enemy.stateTime + (enemy.cycleOffset || 0) >= Math.max(0.75, 1.15 / cycleSpeed)) {
+        enemy.state = "rising";
         enemy.stateTime = 0;
       }
-    } else if (enemy.state === "emerging") {
-      enemy.y = Math.max(enemy.exposedY, enemy.y - 28 * dt);
+    } else if (enemy.state === "rising") {
+      enemy.y = Math.max(enemy.exposedY, enemy.y - 26 * cycleSpeed * dt);
       if (enemy.y <= enemy.exposedY) {
         enemy.y = enemy.exposedY;
-        enemy.state = "exposed";
+        enemy.state = "attacking";
         enemy.stateTime = 0;
       }
-    } else if (enemy.state === "exposed") {
+    } else if (enemy.state === "attacking") {
       enemy.y = enemy.exposedY;
-      if (enemy.stateTime >= 1.2 || close) {
-        enemy.state = "retracting";
+      if (enemy.stateTime >= Math.max(0.82, 1.25 / cycleSpeed)) {
+        enemy.state = "lowering";
         enemy.stateTime = 0;
       }
-    } else if (enemy.state === "retracting") {
-      enemy.y = Math.min(enemy.hiddenY, enemy.y + 32 * dt);
+    } else if (enemy.state === "lowering") {
+      enemy.y = Math.min(enemy.hiddenY, enemy.y + 30 * cycleSpeed * dt);
       if (enemy.y >= enemy.hiddenY) {
         enemy.y = enemy.hiddenY;
         enemy.state = "hidden";
@@ -264,6 +272,22 @@
       enemy.direction = -1;
     }
     enemy.y = enemy.baseY + Math.sin(enemy.phase) * 10;
+    return enemy;
+  }
+
+  function stepCrossingFish(enemy, dt) {
+    enemy.phase = (enemy.phase || 0) + dt * 2.7;
+    enemy.x += enemy.vx * dt;
+    if (enemy.x <= enemy.patrolMinX) {
+      enemy.x = enemy.patrolMinX;
+      enemy.vx = Math.abs(enemy.vx);
+      enemy.direction = 1;
+    } else if (enemy.x >= enemy.patrolMaxX) {
+      enemy.x = enemy.patrolMaxX;
+      enemy.vx = -Math.abs(enemy.vx);
+      enemy.direction = -1;
+    }
+    enemy.y = enemy.baseY - Math.abs(Math.sin(enemy.phase)) * (enemy.arcHeight || 22);
     return enemy;
   }
 
@@ -305,6 +329,7 @@
     var players = activePlayersFromContext(context);
     if (enemy.behaviour === "pipePlant") return stepPlant(enemy, dt, players);
     if (enemy.behaviour === "aerialPatrol") return stepFlying(enemy, dt);
+    if (enemy.behaviour === "crossingFish") return stepCrossingFish(enemy, dt);
     if (enemy.behaviour === "projectileThrower") return stepRanged(enemy, dt, players, context);
     if (enemy.behaviour === "shellWalker" && enemy.state === "shellStationary") {
       enemy.vx = 0;

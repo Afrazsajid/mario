@@ -50,13 +50,13 @@
     }),
     plant: Object.freeze({
       id: "plant",
-      spriteFamily: "plant",
+      spriteFamily: "flowerPlant",
       movementSpeed: 28,
       health: 1,
       damage: 1,
       scoreEvent: "enemyAdvanced",
       budgetCost: 2,
-      minimumDistance: 2200,
+      minimumDistance: 550,
       maximumNearbyCount: 2,
       behaviour: "pipePlant",
       allowedTerrain: ["pipe"],
@@ -103,6 +103,20 @@
       behaviour: "projectileThrower",
       allowedTerrain: ["ground", "platform"],
       spawnRules: ["openSpace", "safeDodge"]
+    }),
+    fish: Object.freeze({
+      id: "fish",
+      spriteFamily: "fish",
+      movementSpeed: 54,
+      health: 1,
+      damage: 1,
+      scoreEvent: "enemyAdvanced",
+      budgetCost: 3,
+      minimumDistance: 15000,
+      maximumNearbyCount: 2,
+      behaviour: "crossingFish",
+      allowedTerrain: ["air", "gap"],
+      spawnRules: ["clearArc", "notMandatoryLanding"]
     })
   });
 
@@ -132,9 +146,10 @@
       collisionWidth: 14,
       collisionHeight: 24
     }),
-    plant: Object.freeze({
-      enemy: [{ sx: 128, sy: 8, sw: 16, sh: 24 }, { sx: 144, sy: 8, sw: 16, sh: 24 }],
-      enemyr: [{ sx: 80, sy: 8, sw: 16, sh: 24 }, { sx: 96, sy: 8, sw: 16, sh: 24 }],
+    flowerPlant: Object.freeze({
+      enemy: [{ sx: 224, sy: 8, sw: 16, sh: 24, mouth: "closed" }, { sx: 240, sy: 8, sw: 16, sh: 24, mouth: "open" }],
+      enemyr: [{ sx: 224, sy: 8, sw: 16, sh: 24, mouth: "closed" }, { sx: 240, sy: 8, sw: 16, sh: 24, mouth: "open" }],
+      upsideDown: [{ sx: 256, sy: 8, sw: 16, sh: 24, mouth: "open" }, { sx: 272, sy: 8, sw: 16, sh: 24, mouth: "closed" }],
       drawWidth: 16,
       drawHeight: 24,
       collisionWidth: 14,
@@ -164,6 +179,14 @@
       drawHeight: 24,
       collisionWidth: 14,
       collisionHeight: 22
+    }),
+    fish: Object.freeze({
+      enemy: [{ sx: 624, sy: 16, sw: 16, sh: 16 }, { sx: 640, sy: 16, sw: 16, sh: 16 }],
+      enemyr: [{ sx: 624, sy: 16, sw: 16, sh: 16 }, { sx: 640, sy: 16, sw: 16, sh: 16 }],
+      drawWidth: 16,
+      drawHeight: 16,
+      collisionWidth: 14,
+      collisionHeight: 12
     })
   });
 
@@ -171,7 +194,7 @@
     { id: "SINGLE_PATROL", minDistance: 0, maxDistance: Infinity, budgetCost: 1, requiredTerrain: "ground", slots: ["goomba"], safeEntryDistance: 96, safeExitDistance: 64 },
     { id: "DOUBLE_PATROL", minDistance: 700, maxDistance: Infinity, budgetCost: 2, requiredTerrain: "ground", slots: ["goomba", "goomba"], safeEntryDistance: 112, safeExitDistance: 64 },
     { id: "BASIC_PLUS_KOOPA", minDistance: 1400, maxDistance: Infinity, budgetCost: 3, requiredTerrain: "ground", slots: ["goomba", "koopa"], safeEntryDistance: 128, safeExitDistance: 80 },
-    { id: "PIPE_PLANT", minDistance: 2200, maxDistance: Infinity, budgetCost: 2, requiredTerrain: "pipe", slots: ["plant"], safeEntryDistance: 112, safeExitDistance: 96 },
+    { id: "PIPE_PLANT", minDistance: 550, maxDistance: Infinity, budgetCost: 2, requiredTerrain: "pipe", slots: ["plant"], safeEntryDistance: 112, safeExitDistance: 96 },
     { id: "DOUBLE_PIPE_TIMING", minDistance: 4500, maxDistance: Infinity, budgetCost: 4, requiredTerrain: "pipe", slots: ["plant", "plant"], safeEntryDistance: 128, safeExitDistance: 96 },
     { id: "FAST_FOLLOWER", minDistance: 2800, maxDistance: Infinity, budgetCost: 3, requiredTerrain: "ground", slots: ["goomba", "fastWalker"], safeEntryDistance: 128, safeExitDistance: 80 },
     { id: "UPPER_ROUTE_GUARD", minDistance: 3200, maxDistance: Infinity, budgetCost: 3, requiredTerrain: "platform", slots: ["goomba", "fastWalker"], safeEntryDistance: 128, safeExitDistance: 80 },
@@ -181,6 +204,7 @@
     { id: "SPINY_PRESSURE", minDistance: 6200, maxDistance: Infinity, budgetCost: 3, requiredTerrain: "ground", slots: ["spiny"], safeEntryDistance: 128, safeExitDistance: 96 },
     { id: "RANGED_CROSSING", minDistance: 10000, maxDistance: Infinity, budgetCost: 4, requiredTerrain: "open", slots: ["ranged"], safeEntryDistance: 160, safeExitDistance: 128 },
     { id: "MIXED_GROUND_FORMATION", minDistance: 9000, maxDistance: Infinity, budgetCost: 7, requiredTerrain: "ground", slots: ["goomba", "fastWalker", "spiny"], safeEntryDistance: 160, safeExitDistance: 112 },
+    { id: "FISH_CROSSING", minDistance: 15000, maxDistance: Infinity, budgetCost: 3, requiredTerrain: "gap", slots: ["fish"], safeEntryDistance: 144, safeExitDistance: 112 },
     { id: "THREE_ROLE_ENCOUNTER", minDistance: 14000, maxDistance: Infinity, budgetCost: 8, requiredTerrain: "mixed", slots: ["goomba", "plant", "flying"], safeEntryDistance: 176, safeExitDistance: 128 }
   ]);
 
@@ -224,6 +248,7 @@
       fireCooldown: options.fireCooldown || 0,
       lastFiredAt: 0,
       phase: options.phase || 0,
+      animationFrame: options.animationFrame || 0,
       encounterId: options.encounterId || null,
       role: options.role || "PATROL"
     };
@@ -235,12 +260,20 @@
       enemy.hiddenY = options.hiddenY !== undefined ? options.hiddenY : enemy.pipeTopY + 4;
       enemy.y = enemy.hiddenY;
       enemy.state = "hidden";
+      enemy.cycleSpeed = options.cycleSpeed || 1;
     }
     if (def.behaviour === "aerialPatrol") {
       enemy.vy = 0;
       enemy.patrolMinX = options.patrolMinX !== undefined ? options.patrolMinX : x - 64;
       enemy.patrolMaxX = options.patrolMaxX !== undefined ? options.patrolMaxX : x + 96;
       enemy.baseY = enemy.y;
+    }
+    if (def.behaviour === "crossingFish") {
+      enemy.vy = 0;
+      enemy.patrolMinX = options.patrolMinX !== undefined ? options.patrolMinX : x - 64;
+      enemy.patrolMaxX = options.patrolMaxX !== undefined ? options.patrolMaxX : x + 96;
+      enemy.baseY = options.baseY !== undefined ? options.baseY : enemy.y;
+      enemy.arcHeight = options.arcHeight || 22;
     }
     return enemy;
   }

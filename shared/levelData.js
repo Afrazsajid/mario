@@ -200,6 +200,9 @@
     ].forEach(function (e, index) {
       enemies.push(enemyOnSurface("enemy-" + index, e[0], e[1] + 1, e[2], stageAt(e[0]).enemySpeedMultiplier));
     });
+    addPlantEnemy(enemies, "story-plant-intro", 28, 11, "easy", 0.35);
+    addPlantEnemy(enemies, "story-plant-enemy", 214, 10, "medium", 1.1);
+    addPlantEnemy(enemies, "story-plant-final", 398, 10, "hard", 1.75);
     return enemies;
   }
 
@@ -234,11 +237,13 @@
   }
 
   function addPlantEnemy(enemies, id, tx, pipeTopTile, difficulty, cycleOffset) {
+    var cycleSpeed = difficulty === "expert" ? 1.24 : difficulty === "hard" ? 1.14 : 1;
     return addEndlessEnemy(enemies, id, tx, pipeTopTile, "plant", difficulty, {
       pipeTopY: pipeTopTile * tile,
       hiddenY: pipeTopTile * tile + 3,
       exposedY: pipeTopTile * tile - enemyRegistry.frameForType("plant").collisionHeight,
       cycleOffset: cycleOffset || 0,
+      cycleSpeed: cycleSpeed,
       role: "PIPE_GUARD"
     });
   }
@@ -257,6 +262,17 @@
       direction: -1,
       role: "RANGED_PRESSURE",
       fireCooldown: 0.8
+    });
+  }
+
+  function addFishEnemy(enemies, id, tx, bottomTile, difficulty, patrolTiles) {
+    patrolTiles = patrolTiles || 8;
+    return addEndlessEnemy(enemies, id, tx, bottomTile, "fish", difficulty, {
+      patrolMinX: (tx - 2) * tile,
+      patrolMaxX: (tx + patrolTiles) * tile,
+      baseY: bottomTile * tile - enemyRegistry.frameForType("fish").collisionHeight,
+      arcHeight: difficulty === "expert" ? 28 : 22,
+      role: "VERTICAL_PRESSURE"
     });
   }
 
@@ -322,6 +338,7 @@
       addEndlessEnemy(parts.enemies, enemyPrefix + "0", start + 33, 13, "goomba", difficulty);
       if (distance > 5000) addFlyingEnemy(parts.enemies, enemyPrefix + "1", start + 20, 9, difficulty, 6);
       if (distance > 12000 && variant === 3) addEndlessEnemy(parts.enemies, enemyPrefix + "2", start + 20, 13, "spiny", difficulty, { role: "LANDING_PRESSURE" });
+      if (distance > 15000 && variant === 1) addFishEnemy(parts.enemies, enemyPrefix + "3", start + 21, 11, difficulty, 6);
       return;
     }
 
@@ -363,7 +380,7 @@
       addPipe(parts.solids, start + 24, 10, 3, id + "-pipe-b");
       addCoinArc(parts.coins, id + "-pipe-coins", start + 4, 8, 10, 3);
       addEndlessEnemy(parts.enemies, enemyPrefix + "0", start + 17, 13, "goomba", difficulty);
-      if (distance > 2200) addPlantEnemy(parts.enemies, enemyPrefix + "1", start + 10, 11, difficulty, variant * 0.45);
+      if (distance > 550) addPlantEnemy(parts.enemies, enemyPrefix + "1", start + 10, 11, difficulty, variant * 0.45);
       if (distance > 4500) addPlantEnemy(parts.enemies, enemyPrefix + "2", start + 24, 10, difficulty, 1.4 + variant * 0.25);
       if (distance > 10000) addRangedEnemy(parts.enemies, enemyPrefix + "3", start + 33, 13, difficulty);
       return;
