@@ -92,7 +92,12 @@ test("a survivor keeps playing endlessly after the other player is spectating", 
   finishDeathAnimation(host);
   game.update(1 / constants.SERVER_TICK_RATE);
 
+<<<<<<< HEAD
   guest.state.x = 434 * constants.TILE_SIZE;
+=======
+  game.world.finishX = guest.state.x;
+  guest.state.x = game.world.finishX;
+>>>>>>> 23d77d90b7ad9e49b6022c8b03b23d9d657e62b0
   game.update(0);
 
   assert.equal(room.status, constants.ROOM_STATUS.PLAYING);

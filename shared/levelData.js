@@ -1,7 +1,13 @@
 (function (root, factory) {
+<<<<<<< HEAD
   if (typeof module === "object" && module.exports) module.exports = factory(require("./constants"), require("./physics"), require("./enemyRegistry"));
   else root.PQDLevelData = factory(root.PQDConstants, root.PQDPhysics, root.PQDEnemyRegistry);
 })(typeof globalThis !== "undefined" ? globalThis : this, function (constants, physics, enemyRegistry) {
+=======
+  if (typeof module === "object" && module.exports) module.exports = factory(require("./constants"), require("./physics"), require("./endlessDirector"), require("./enemyRegistry"));
+  else root.PQDLevelData = factory(root.PQDConstants, root.PQDPhysics, root.PQDEndlessDirector, root.PQDEnemyRegistry);
+})(typeof globalThis !== "undefined" ? globalThis : this, function (constants, physics, endlessDirector, enemyRegistry) {
+>>>>>>> 23d77d90b7ad9e49b6022c8b03b23d9d657e62b0
   "use strict";
 
   var tile = constants.TILE_SIZE;
@@ -409,6 +415,7 @@
     return world.solids;
   }
 
+<<<<<<< HEAD
   function createWorld() {
     var staticSolids = buildStaticSolids();
     var movingPlatforms = [
@@ -441,11 +448,150 @@
       solids: staticSolids,
       movingPlatforms: movingPlatforms,
       sections: sections,
+=======
+  function buildDirectedWorld(seed, sectionCount) {
+    sectionCount = sectionCount || 120;
+    var director = endlessDirector.createDirector(seed || "pqd-default-world");
+    var solids = [];
+    var coins = [];
+    var enemies = [];
+    var powerUps = [];
+    var movingPlatforms = [];
+    var checkpoints = [];
+    var sections = [];
+    var milestones = [];
+    var xTile = 0;
+
+    function addDirectedGround(sectionIndex, startTile, endTile) {
+      solids.push(tileRect(startTile, 13, endTile - startTile, 2, "ground-d-" + sectionIndex, "ground"));
+    }
+
+    function addDirectedCoins(prefix, startTile, count, yTile) {
+      for (var i = 0; i < count; i += 1) coins.push(coin(prefix + "-coin-" + i, startTile + i, yTile - Math.floor(i / 4)));
+    }
+
+    function addDirectedEnemy(sectionIndex, enemyIndex, enemyTypeId, tx, ty) {
+      var def = enemyRegistry.get(enemyTypeId);
+      enemies.push({
+        id: "enemy-s" + sectionIndex + "-" + enemyIndex,
+        type: def.legacyType,
+        enemyType: def.id,
+        enemyFamily: def.spriteFamily,
+        role: def.role,
+        x: tx * tile,
+        y: ty * tile,
+        w: def.collisionSize.w,
+        h: def.collisionSize.h,
+        vx: -def.movementSpeed,
+        vy: 0,
+        baseY: ty * tile,
+        alive: true,
+        health: def.health,
+        behaviour: def.behaviour,
+        scoreType: def.scoreType
+      });
+    }
+
+    function addOptionalGeometry(sectionIndex, generated, startTile, endTile) {
+      var family = generated.section.family;
+      var variant = generated.variant;
+      if (family === "RISING_STAIRS" || family === "VERTICAL_CLIMB") addStair(solids, startTile + 6, 12, Math.min(6, 3 + variant.elevationTiles), 1, "d-s" + sectionIndex + "-rise");
+      if (family === "DESCENDING_STAIRS") addStair(solids, endTile - 8, 12, Math.min(6, 3 + variant.elevationTiles), -1, "d-s" + sectionIndex + "-descend");
+      if (family === "PLATFORM_SEQUENCE" || family === "SPLIT_ROUTE" || family === "RISK_REWARD_ROUTE") {
+        addBlocks(solids, [[startTile + 8, 9, 4, 1], [startTile + 16, 7, 4, 1], [startTile + 25, 9, 4, 1]], "d-s" + sectionIndex + "-platform");
+      }
+      if (family === "PIPE_SECTION") {
+        addPipe(solids, startTile + 8, 11, 2, "pipe-d-" + sectionIndex + "-a");
+        addPipe(solids, startTile + 18, 10, 3, "pipe-d-" + sectionIndex + "-b");
+      }
+      if (variant.optionalRoute) {
+        addBlocks(solids, [[startTile + 10, 6, 4, 1], [startTile + 18, 5, 4, 1], [startTile + 26, 6, 4, 1]], "d-s" + sectionIndex + "-bonus");
+      }
+      if (variant.movingPlatforms) {
+        movingPlatforms.push(movingPlatform("moving-s" + sectionIndex + "-0", startTile + 9, 10, 3, 6, Math.min(34, 24 + generated.section.difficultyTier), generated.section.difficultyTier >= 7 ? "expert" : "hard"));
+      }
+    }
+
+    for (var s = 0; s < sectionCount; s += 1) {
+      var generated = director.nextSection();
+      var lengthTiles = Math.max(18, Math.round((generated.section.endX - generated.section.startX) / tile));
+      var startTile = xTile;
+      var endTile = startTile + lengthTiles;
+      addDirectedGround(s, startTile, endTile);
+      addOptionalGeometry(s, generated, startTile, endTile);
+      addDirectedCoins("s" + s, startTile + 4, generated.section.pacingBeat === "reward" || generated.section.family === "RECOVERY_SECTION" ? 12 : 6, generated.section.family === "SPLIT_ROUTE" ? 7 : 9);
+
+      var enemySafeStart = startTile + Math.max(s === 0 ? 12 : 5, Math.floor(generated.encounter.safeEntryDistance / tile));
+      generated.encounter.enemyTypes.forEach(function (enemyType, index) {
+        var tx = Math.min(endTile - 4, enemySafeStart + index * 5);
+        var ty = enemyType === "aerial" ? 8 : enemyType === "plant" ? 10 : 12;
+        addDirectedEnemy(s, index, enemyType, tx, ty);
+      });
+
+      if (generated.section.checkpoint) checkpoints.push(checkpoint("checkpoint-s" + s, startTile + 3, 11, generated.section.id));
+      if (generated.section.family === "RECOVERY_SECTION" && s > 0) {
+        var powerType = generated.section.difficultyTier >= 5 ? "fireFlower" : "mushroom";
+        powerUps.push({ id: "power-s" + s, type: powerType, x: (startTile + 8) * tile, y: 8 * tile, w: 14, h: 14, collectedBy: null });
+      }
+      if (generated.section.milestone) milestones.push({ id: "milestone-" + s, x: startTile * tile, label: (startTile * tile) + " DISTANCE REACHED", sectionIndex: s });
+
+      sections.push({
+        id: generated.section.id,
+        name: generated.section.family.replace(/_/g, " "),
+        startX: startTile * tile,
+        endX: endTile * tile,
+        difficulty: generated.section.difficultyTier,
+        family: generated.section.family,
+        variantId: generated.section.variantId,
+        encounterId: generated.section.encounterId,
+        pacingBeat: generated.section.pacingBeat,
+        intensity: generated.section.intensity
+      });
+      xTile = endTile;
+    }
+
+    var world = {
+      id: "endless-directed",
+      title: "Directed Endless Run",
+      theme: "aboveground",
+      width: xTile * tile,
+      height: constants.LEVEL_HEIGHT,
+      spawnPoints: [{ x: 56, y: 192 }, { x: 76, y: 192 }],
+      finishX: xTile * tile + 1000000,
+      exitX: xTile * tile + 1000000,
+      worldSeed: seed || "pqd-default-world",
+      runId: director.state.runId,
+      nextSectionIndex: director.state.nextSectionIndex,
+      generatedWorldEndX: xTile * tile,
+      difficultyState: director.state.difficultyState,
+      directorState: director.state.directorState,
+      sections: sections,
+      milestones: milestones,
+      difficultyStages: DIFFICULTY_STAGES,
+      staticSolids: solids,
+      solids: [],
+      movingPlatforms: movingPlatforms,
+>>>>>>> 23d77d90b7ad9e49b6022c8b03b23d9d657e62b0
       checkpoints: checkpoints,
       coins: coins,
       powerUps: powerUps,
       enemies: enemies
+<<<<<<< HEAD
     });
+=======
+    };
+    syncSolids(world);
+    return world;
+  }
+
+  function createWorld(options) {
+    options = options || {};
+    if (options.legacyFinite) return createLegacyFiniteWorld();
+    return buildDirectedWorld(options.seed || "pqd-default-world", options.sectionCount || 120);
+  }
+
+  function createLegacyFiniteWorld() {
+>>>>>>> 23d77d90b7ad9e49b6022c8b03b23d9d657e62b0
     var world = {
       id: "level-1-endless",
       title: "Skyline Sprint Endless",
@@ -528,6 +674,7 @@
       if (!hasLanding) issues.push("Checkpoint " + cp.id + " has no nearby landing.");
     });
 
+<<<<<<< HEAD
     if (!world.endless && world.finishX > world.width) issues.push("Finish is outside level width.");
     if (world.sections[world.sections.length - 1].endX !== world.width) issues.push("Final section does not match level width.");
     if (world.endless && world.finishX <= world.width) issues.push("Endless finish marker should remain beyond the generated buffer.");
@@ -539,6 +686,10 @@
       var insideSolid = enemyItem.behaviour === "pipePlant" ? false : allSolids.some(function (solid) { return physics && physics.overlaps ? physics.overlaps(enemyItem, solid) : false; });
       if (insideSolid) issues.push("Enemy " + enemyItem.id + " intersects solid geometry.");
     });
+=======
+    if (!world.generatedWorldEndX && world.finishX > world.width) issues.push("Finish is outside level width.");
+    if (world.sections[world.sections.length - 1].endX > world.width) issues.push("Final section exceeds level width.");
+>>>>>>> 23d77d90b7ad9e49b6022c8b03b23d9d657e62b0
     world.movingPlatforms.forEach(function (platform) {
       if (platform.w < caps.safeLandingWidth) issues.push("Moving platform " + platform.id + " is narrower than safe landing width.");
       if (Math.abs(platform.vx) > caps.movingPlatformSpeed) issues.push("Moving platform " + platform.id + " exceeds tested platform speed.");

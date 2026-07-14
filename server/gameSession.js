@@ -297,6 +297,7 @@ class GameSession {
       if (enemy.behaviour === "pipePlant" && enemy.state === "hidden") return;
       const stomp = box.vy > 0 && box.y + box.h - enemy.y <= 12;
       if (stomp || box.temporaryEffect === "star") {
+<<<<<<< HEAD
         if (enemy.type === "koopa" && enemy.state !== "shellStationary" && enemy.state !== "shellMoving" && box.temporaryEffect !== "star") {
           this.enterKoopaShell(enemy);
           box.vy = -170;
@@ -326,6 +327,17 @@ class GameSession {
         this.score(player, this.scoreEventForEnemy(enemy));
       } else if (enemy.state === "shellStationary") {
         this.kickShell(enemy, box.x + box.w / 2 < enemy.x + enemy.w / 2 ? 1 : -1);
+=======
+        if (enemy.behaviour === "armoured_walker" && box.temporaryEffect !== "star") {
+          box.vy = -120;
+          const eliminated = this.damagePlayer(player);
+          if (!eliminated) this.score(player, "damage");
+          return;
+        }
+        enemy.alive = false;
+        box.vy = -170;
+        this.score(player, enemy.scoreType || (enemy.type === "koopa" ? "enemyAdvanced" : "enemyBasic"));
+>>>>>>> 23d77d90b7ad9e49b6022c8b03b23d9d657e62b0
       } else if (Date.now() > box.invulnerableUntil) {
         const eliminated = this.damagePlayer(player);
         if (!eliminated) this.score(player, "damage");
@@ -478,7 +490,11 @@ class GameSession {
     if (!enemy.alive) return;
     this.defeatEnemy(enemy);
     const owner = this.room.players.get(laser.ownerId);
+<<<<<<< HEAD
     if (owner) this.score(owner, this.scoreEventForEnemy(enemy));
+=======
+    if (owner) this.score(owner, enemy.scoreType || (enemy.type === "koopa" ? "enemyAdvanced" : "enemyBasic"));
+>>>>>>> 23d77d90b7ad9e49b6022c8b03b23d9d657e62b0
     this.emitRoom("game:event", {
       id: `${this.roundId}-${this.tick}-${laser.id}-hit`,
       roundId: this.roundId,
@@ -836,6 +852,7 @@ class GameSession {
         id: enemy.id,
         x: enemy.x,
         y: enemy.y,
+<<<<<<< HEAD
         w: enemy.w,
         h: enemy.h,
         vx: enemy.vx,
@@ -848,6 +865,17 @@ class GameSession {
         animationFrame: enemy.animationFrame,
         pipeTopY: enemy.pipeTopY,
         direction: enemy.direction
+=======
+        alive: enemy.alive,
+        type: enemy.type,
+        enemyType: enemy.enemyType || enemy.type,
+        enemyFamily: enemy.enemyFamily || enemy.type,
+        behaviour: enemy.behaviour || "walker",
+        direction: enemy.vx > 0 ? "right" : "left",
+        animationFrame: enemy.animationFrame || 0,
+        w: enemy.w,
+        h: enemy.h
+>>>>>>> 23d77d90b7ad9e49b6022c8b03b23d9d657e62b0
       })),
       checkpoints: this.world.checkpoints.map((checkpoint) => ({
         id: checkpoint.id,

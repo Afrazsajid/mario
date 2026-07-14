@@ -17,6 +17,7 @@ function createSession() {
   return { room, game: room.game, mario: created.player, luigi: joined.player };
 }
 
+<<<<<<< HEAD
 test("endless level validates and exposes authored challenge families", () => {
   const world = levelData.createWorld();
   const report = levelData.validateLevel(world);
@@ -29,10 +30,21 @@ test("endless level validates and exposes authored challenge families", () => {
   assert.ok(world.checkpoints.length > 12);
   assert.ok(world.movingPlatforms.length > 4);
   assert.deepEqual(new Set(world.sections.slice(6).map((section) => section.family)), new Set(levelData.ENDLESS_FAMILIES));
+=======
+test("directed endless level validates and exposes authored sections", () => {
+  const world = levelData.createWorld();
+  const report = levelData.validateLevel(world);
+  assert.equal(report.ok, true, report.issues.join("\n"));
+  assert.equal(world.id, "endless-directed");
+  assert.equal(world.width, world.generatedWorldEndX);
+  assert.ok(world.sections.length >= 100);
+  assert.ok(world.checkpoints.length >= 10);
+  assert.ok(world.movingPlatforms.length >= 1);
+>>>>>>> 23d77d90b7ad9e49b6022c8b03b23d9d657e62b0
 });
 
-test("old blocked wall area is a climbable designed route", () => {
-  const world = levelData.createWorld();
+test("legacy old blocked wall area is still available as a climbable designed route", () => {
+  const world = levelData.createWorld({ legacyFinite: true });
   const fixedSteps = world.staticSolids
     .filter((solid) => solid.id.indexOf("fixed-route-") === 0 && solid.id.indexOf("step") !== -1)
     .sort((a, b) => a.x - b.x);
