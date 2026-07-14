@@ -149,6 +149,28 @@
 
   function stepEnemy(enemy, dt, world) {
     if (!enemy.alive) return enemy;
+    enemy.animationFrame = (enemy.animationFrame || 0) + dt * 8;
+    if (enemy.behaviour === "pipe_plant_cycle") {
+      enemy.phase = (enemy.phase || 0) + dt;
+      var open = Math.sin(enemy.phase * Math.PI / 1.8);
+      enemy.y = enemy.baseY - Math.max(0, open) * 18;
+      return enemy;
+    }
+    if (enemy.behaviour === "aerial_sine") {
+      enemy.x += enemy.vx * dt;
+      enemy.phase = (enemy.phase || 0) + dt;
+      enemy.y = (enemy.baseY || enemy.y) + Math.sin(enemy.phase * 2.4) * 18;
+      if (enemy.x < 0 || enemy.x > world.width - enemy.w) enemy.vx = -enemy.vx;
+      return enemy;
+    }
+    if (enemy.behaviour === "cycle_jumper") {
+      enemy.jumpTimer = (enemy.jumpTimer || 0) - dt;
+      if (enemy.jumpTimer <= 0 && Math.abs(enemy.vy || 0) < 1) {
+        enemy.vy = -285;
+        enemy.jumpTimer = 1.6;
+      }
+    }
+    if (enemy.behaviour === "elite_patrol" && Math.abs(enemy.vx) < 1) enemy.vx = -18;
     enemy.vy += GRAVITY * dt;
     enemy.vy = Math.min(380, enemy.vy);
     enemy.x += enemy.vx * dt;

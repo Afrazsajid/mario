@@ -987,13 +987,35 @@
       if (items) ctx.drawImage(items, 0, sy, 16, 16, worldX(power.x), worldY(power.y), 16, 16);
     });
     var enemyImg = resources.get("sprites/enemy.png");
+    var enemyImgLeft = resources.get("sprites/enemyr.png");
     world.enemies.forEach(function (enemy) {
       var current = enemyUpdates[enemy.id] || enemy;
       if (!current.alive) return;
-      var sx = current.type === "koopa" ? 96 : 0;
-      var sy = current.type === "koopa" ? 0 : 16;
-      var h = current.type === "koopa" ? 32 : 16;
-      if (enemyImg) ctx.drawImage(enemyImg, sx, sy, 16, h, worldX(current.x), worldY(current.y), 16, h);
+      if (window.PQDEnemyAtlas && enemyImg) {
+        var direction = current.direction || (current.vx > 0 ? "right" : "left");
+        var frame = window.PQDEnemyAtlas.getFrame({
+          enemyFamily: current.enemyFamily || current.enemyType || current.type,
+          direction: direction,
+          frameIndex: current.animationFrame || performance.now() / 120
+        });
+        var img = direction === "right" && enemyImgLeft ? enemyImgLeft : enemyImg;
+        ctx.drawImage(
+          img,
+          frame.sourceX,
+          frame.sourceY,
+          frame.sourceWidth,
+          frame.sourceHeight,
+          worldX(current.x + frame.drawOffsetX),
+          worldY(current.y + frame.drawOffsetY),
+          frame.drawWidth,
+          frame.drawHeight
+        );
+      } else {
+        var sx = current.type === "koopa" ? 96 : 0;
+        var sy = current.type === "koopa" ? 0 : 16;
+        var h = current.type === "koopa" ? 32 : 16;
+        if (enemyImg) ctx.drawImage(enemyImg, sx, sy, 16, h, worldX(current.x), worldY(current.y), 16, h);
+      }
     });
     drawLasers();
     if (!snapshot || !snapshot.players) return;

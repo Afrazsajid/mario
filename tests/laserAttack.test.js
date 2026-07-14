@@ -115,7 +115,7 @@ test("lasers are destroyed by solids, boundaries, lifetime and round cleanup", (
   makeFire(mario);
   makeFire(luigi);
   const now = Date.now();
-  const solid = game.world.solids.find((item) => item.id.indexOf("block-") === 0);
+  const solid = game.world.solids.find((item) => item.type === "pipe" || item.type === "block" || item.type === "brick");
 
   game.lasers = [{
     id: "solid-hit",

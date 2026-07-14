@@ -17,19 +17,19 @@ function createSession() {
   return { room, game: room.game, mario: created.player, luigi: joined.player };
 }
 
-test("extended level validates and exposes six progressive sections", () => {
+test("directed endless level validates and exposes authored sections", () => {
   const world = levelData.createWorld();
   const report = levelData.validateLevel(world);
   assert.equal(report.ok, true, report.issues.join("\n"));
-  assert.deepEqual(report.sections, ["intro", "movement", "enemy", "vertical", "advanced", "final"]);
-  assert.equal(world.width, constants.LEVEL_WIDTH);
-  assert.equal(world.finishX, 434 * constants.TILE_SIZE);
-  assert.equal(world.checkpoints.length, 4);
-  assert.equal(world.movingPlatforms.length, 4);
+  assert.equal(world.id, "endless-directed");
+  assert.equal(world.width, world.generatedWorldEndX);
+  assert.ok(world.sections.length >= 100);
+  assert.ok(world.checkpoints.length >= 10);
+  assert.ok(world.movingPlatforms.length >= 1);
 });
 
-test("old blocked wall area is a climbable designed route", () => {
-  const world = levelData.createWorld();
+test("legacy old blocked wall area is still available as a climbable designed route", () => {
+  const world = levelData.createWorld({ legacyFinite: true });
   const fixedSteps = world.staticSolids
     .filter((solid) => solid.id.indexOf("fixed-route-") === 0 && solid.id.indexOf("step") !== -1)
     .sort((a, b) => a.x - b.x);

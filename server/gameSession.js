@@ -270,9 +270,15 @@ class GameSession {
       if (!enemy.alive || !physics.overlaps(box, enemy)) return;
       const stomp = box.vy > 0 && box.y + box.h - enemy.y <= 12;
       if (stomp || box.temporaryEffect === "star") {
+        if (enemy.behaviour === "armoured_walker" && box.temporaryEffect !== "star") {
+          box.vy = -120;
+          const eliminated = this.damagePlayer(player);
+          if (!eliminated) this.score(player, "damage");
+          return;
+        }
         enemy.alive = false;
         box.vy = -170;
-        this.score(player, enemy.type === "koopa" ? "enemyAdvanced" : "enemyBasic");
+        this.score(player, enemy.scoreType || (enemy.type === "koopa" ? "enemyAdvanced" : "enemyBasic"));
       } else if (Date.now() > box.invulnerableUntil) {
         const eliminated = this.damagePlayer(player);
         if (!eliminated) this.score(player, "damage");
@@ -383,7 +389,7 @@ class GameSession {
     if (!enemy.alive) return;
     enemy.alive = false;
     const owner = this.room.players.get(laser.ownerId);
-    if (owner) this.score(owner, enemy.type === "koopa" ? "enemyAdvanced" : "enemyBasic");
+    if (owner) this.score(owner, enemy.scoreType || (enemy.type === "koopa" ? "enemyAdvanced" : "enemyBasic"));
     this.emitRoom("game:event", {
       id: `${this.roundId}-${this.tick}-${laser.id}-hit`,
       roundId: this.roundId,
@@ -660,7 +666,20 @@ class GameSession {
       })),
       coins: this.world.coins.filter((coin) => coin.collectedBy).map((coin) => ({ id: coin.id, collectedBy: coin.collectedBy })),
       powerUps: this.world.powerUps.filter((power) => power.collectedBy).map((power) => ({ id: power.id, collectedBy: power.collectedBy })),
-      enemies: this.world.enemies.map((enemy) => ({ id: enemy.id, x: enemy.x, y: enemy.y, alive: enemy.alive, type: enemy.type })),
+      enemies: this.world.enemies.map((enemy) => ({
+        id: enemy.id,
+        x: enemy.x,
+        y: enemy.y,
+        alive: enemy.alive,
+        type: enemy.type,
+        enemyType: enemy.enemyType || enemy.type,
+        enemyFamily: enemy.enemyFamily || enemy.type,
+        behaviour: enemy.behaviour || "walker",
+        direction: enemy.vx > 0 ? "right" : "left",
+        animationFrame: enemy.animationFrame || 0,
+        w: enemy.w,
+        h: enemy.h
+      })),
       checkpoints: this.world.checkpoints.map((checkpoint) => ({
         id: checkpoint.id,
         x: checkpoint.x,

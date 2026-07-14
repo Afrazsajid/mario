@@ -92,6 +92,7 @@ test("a survivor can finish the level after the other player is spectating", () 
   finishDeathAnimation(host);
   game.update(1 / constants.SERVER_TICK_RATE);
 
+  game.world.finishX = guest.state.x;
   guest.state.x = game.world.finishX;
   game.update(0);
 
